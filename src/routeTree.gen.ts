@@ -9,10 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TodayRouteImport } from './routes/today'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as SetPasswordRouteImport } from './routes/set-password'
+import { Route as DuaRouteImport } from './routes/dua'
+import { Route as CounterRouteImport } from './routes/counter'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TodayRoute = TodayRouteImport.update({
+  id: '/today',
+  path: '/today',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SetupRoute = SetupRouteImport.update({
   id: '/setup',
   path: '/setup',
@@ -23,6 +31,16 @@ const SetPasswordRoute = SetPasswordRouteImport.update({
   path: '/set-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DuaRoute = DuaRouteImport.update({
+  id: '/dua',
+  path: '/dua',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CounterRoute = CounterRouteImport.update({
+  id: '/counter',
+  path: '/counter',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -31,36 +49,62 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/counter': typeof CounterRoute
+  '/dua': typeof DuaRoute
   '/set-password': typeof SetPasswordRoute
   '/setup': typeof SetupRoute
+  '/today': typeof TodayRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/counter': typeof CounterRoute
+  '/dua': typeof DuaRoute
   '/set-password': typeof SetPasswordRoute
   '/setup': typeof SetupRoute
+  '/today': typeof TodayRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/counter': typeof CounterRoute
+  '/dua': typeof DuaRoute
   '/set-password': typeof SetPasswordRoute
   '/setup': typeof SetupRoute
+  '/today': typeof TodayRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/set-password' | '/setup'
+  fullPaths: '/' | '/counter' | '/dua' | '/set-password' | '/setup' | '/today'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/set-password' | '/setup'
-  id: '__root__' | '/' | '/set-password' | '/setup'
+  to: '/' | '/counter' | '/dua' | '/set-password' | '/setup' | '/today'
+  id:
+    | '__root__'
+    | '/'
+    | '/counter'
+    | '/dua'
+    | '/set-password'
+    | '/setup'
+    | '/today'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CounterRoute: typeof CounterRoute
+  DuaRoute: typeof DuaRoute
   SetPasswordRoute: typeof SetPasswordRoute
   SetupRoute: typeof SetupRoute
+  TodayRoute: typeof TodayRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/today': {
+      id: '/today'
+      path: '/today'
+      fullPath: '/today'
+      preLoaderRoute: typeof TodayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/setup': {
       id: '/setup'
       path: '/setup'
@@ -75,6 +119,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dua': {
+      id: '/dua'
+      path: '/dua'
+      fullPath: '/dua'
+      preLoaderRoute: typeof DuaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/counter': {
+      id: '/counter'
+      path: '/counter'
+      fullPath: '/counter'
+      preLoaderRoute: typeof CounterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -87,9 +145,21 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CounterRoute: CounterRoute,
+  DuaRoute: DuaRoute,
   SetPasswordRoute: SetPasswordRoute,
   SetupRoute: SetupRoute,
+  TodayRoute: TodayRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
