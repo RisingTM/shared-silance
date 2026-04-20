@@ -14,16 +14,478 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      building_notes: {
+        Row: {
+          content: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      daily_statuses: {
+        Row: {
+          created_at: string
+          id: string
+          journey_id: string
+          status: Database["public"]["Enums"]["status_kind"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          journey_id: string
+          status: Database["public"]["Enums"]["status_kind"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          journey_id?: string
+          status?: Database["public"]["Enums"]["status_kind"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_statuses_journey_id_fkey"
+            columns: ["journey_id"]
+            isOneToOne: false
+            referencedRelation: "journeys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      goals: {
+        Row: {
+          created_at: string
+          done: boolean
+          done_at: string | null
+          id: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          done?: boolean
+          done_at?: string | null
+          id?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          done?: boolean
+          done_at?: string | null
+          id?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      journal_entries: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      journeys: {
+        Row: {
+          created_at: string
+          has_been_reset: boolean
+          id: string
+          nc_start_date: string
+        }
+        Insert: {
+          created_at?: string
+          has_been_reset?: boolean
+          id?: string
+          nc_start_date?: string
+        }
+        Update: {
+          created_at?: string
+          has_been_reset?: boolean
+          id?: string
+          nc_start_date?: string
+        }
+        Relationships: []
+      }
+      memory_vault: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          title: string
+          unlock_day: number
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          title: string
+          unlock_day: number
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          title?: string
+          unlock_day?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      mood_entries: {
+        Row: {
+          created_at: string
+          entry_date: string
+          id: string
+          mood: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          entry_date?: string
+          id?: string
+          mood: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          entry_date?: string
+          id?: string
+          mood?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      nc_breaks: {
+        Row: {
+          broken_by: Database["public"]["Enums"]["broken_by"]
+          created_at: string
+          id: string
+          journey_id: string
+          note: string | null
+        }
+        Insert: {
+          broken_by: Database["public"]["Enums"]["broken_by"]
+          created_at?: string
+          id?: string
+          journey_id: string
+          note?: string | null
+        }
+        Update: {
+          broken_by?: Database["public"]["Enums"]["broken_by"]
+          created_at?: string
+          id?: string
+          journey_id?: string
+          note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nc_breaks_journey_id_fkey"
+            columns: ["journey_id"]
+            isOneToOne: false
+            referencedRelation: "journeys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+          journey_id: string
+          must_set_password: boolean
+          role: Database["public"]["Enums"]["user_role"]
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id: string
+          journey_id: string
+          must_set_password?: boolean
+          role: Database["public"]["Enums"]["user_role"]
+          username: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          journey_id?: string
+          must_set_password?: boolean
+          role?: Database["public"]["Enums"]["user_role"]
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_journey_id_fkey"
+            columns: ["journey_id"]
+            isOneToOne: false
+            referencedRelation: "journeys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sealed_letters: {
+        Row: {
+          content: string
+          sealed_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          sealed_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          sealed_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      strong_moments: {
+        Row: {
+          created_at: string
+          id: string
+          note: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trigger_logs: {
+        Row: {
+          created_at: string
+          id: string
+          the_urge: string | null
+          user_id: string
+          what_happened: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          the_urge?: string | null
+          user_id: string
+          what_happened: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          the_urge?: string | null
+          user_id?: string
+          what_happened?: string
+        }
+        Relationships: []
+      }
+      unlock_prefs: {
+        Row: {
+          is_unlocked: boolean
+          share_building: boolean
+          share_goals: boolean
+          share_journal: boolean
+          share_letter: boolean
+          share_mood: boolean
+          share_reflections: boolean
+          share_strong: boolean
+          share_triggers: boolean
+          share_unsent_audio: boolean
+          share_unsent_text: boolean
+          share_why: boolean
+          share_worship: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          is_unlocked?: boolean
+          share_building?: boolean
+          share_goals?: boolean
+          share_journal?: boolean
+          share_letter?: boolean
+          share_mood?: boolean
+          share_reflections?: boolean
+          share_strong?: boolean
+          share_triggers?: boolean
+          share_unsent_audio?: boolean
+          share_unsent_text?: boolean
+          share_why?: boolean
+          share_worship?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          is_unlocked?: boolean
+          share_building?: boolean
+          share_goals?: boolean
+          share_journal?: boolean
+          share_letter?: boolean
+          share_mood?: boolean
+          share_reflections?: boolean
+          share_strong?: boolean
+          share_triggers?: boolean
+          share_unsent_audio?: boolean
+          share_unsent_text?: boolean
+          share_why?: boolean
+          share_worship?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      unsent_thoughts: {
+        Row: {
+          audio_path: string | null
+          created_at: string
+          id: string
+          kind: string
+          text_content: string | null
+          user_id: string
+        }
+        Insert: {
+          audio_path?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          text_content?: string | null
+          user_id: string
+        }
+        Update: {
+          audio_path?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          text_content?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      weekly_reflections: {
+        Row: {
+          answer: string
+          created_at: string
+          id: string
+          question: string
+          user_id: string
+          year_week: string
+        }
+        Insert: {
+          answer: string
+          created_at?: string
+          id?: string
+          question: string
+          user_id: string
+          year_week: string
+        }
+        Update: {
+          answer?: string
+          created_at?: string
+          id?: string
+          question?: string
+          user_id?: string
+          year_week?: string
+        }
+        Relationships: []
+      }
+      why_notes: {
+        Row: {
+          content: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      worship_logs: {
+        Row: {
+          adhkar: number
+          created_at: string
+          entry_date: string
+          id: string
+          pages: number
+          user_id: string
+        }
+        Insert: {
+          adhkar?: number
+          created_at?: string
+          entry_date?: string
+          id?: string
+          pages?: number
+          user_id: string
+        }
+        Update: {
+          adhkar?: number
+          created_at?: string
+          entry_date?: string
+          id?: string
+          pages?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      current_journey_id: { Args: never; Returns: string }
+      partner_shares: { Args: { section: string }; Returns: boolean }
+      partner_user_id: { Args: never; Returns: string }
     }
     Enums: {
-      [_ in never]: never
+      broken_by: "him" | "her"
+      status_kind: "okay" | "praying" | "miss" | "strong" | "hard" | "proud"
+      user_role: "owner" | "partner"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +612,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      broken_by: ["him", "her"],
+      status_kind: ["okay", "praying", "miss", "strong", "hard", "proud"],
+      user_role: ["owner", "partner"],
+    },
   },
 } as const
