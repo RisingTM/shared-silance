@@ -30,7 +30,7 @@ const SECTIONS = [
   { k: "share_unsent_audio", l: "Unsent thoughts (audio)" },
 ] as const;
 
-type Prefs = Record<string, boolean> & { is_unlocked?: boolean };
+type Prefs = Record<string, any>;
 
 function UnlockPage() {
   const { user, profile, journey, partnerProfile } = useSession();
@@ -43,9 +43,9 @@ function UnlockPage() {
   const load = async () => {
     if (!user || !partnerProfile) return;
     const { data: m } = await supabase.from("unlock_prefs").select("*").eq("user_id", user.id).maybeSingle();
-    setMine((m as Prefs) ?? {});
+    setMine((m as unknown as Prefs) ?? {});
     const { data: p } = await supabase.from("unlock_prefs").select("*").eq("user_id", partnerProfile.id).maybeSingle();
-    setPartner((p as Prefs) ?? null);
+    setPartner((p as unknown as Prefs) ?? null);
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [user?.id, partnerProfile?.id]);
 
@@ -53,7 +53,7 @@ function UnlockPage() {
   useEffect(() => {
     if (!partnerProfile || !partner?.is_unlocked) return;
     const pid = partnerProfile.id;
-    const fetches: Record<string, Promise<any>> = {};
+    const fetches: Record<string, PromiseLike<any>> = {};
     if (partner.share_why) fetches.why = supabase.from("why_notes").select("content").eq("user_id", pid).maybeSingle();
     if (partner.share_building) fetches.building = supabase.from("building_notes").select("content").eq("user_id", pid).maybeSingle();
     if (partner.share_letter) fetches.letter = supabase.from("sealed_letters").select("content,sealed_at").eq("user_id", pid).maybeSingle();
@@ -66,7 +66,7 @@ function UnlockPage() {
     if (partner.share_worship) fetches.worship = supabase.from("worship_logs").select("*").eq("user_id", pid).order("entry_date", { ascending: false });
     if (partner.share_unsent_text || partner.share_unsent_audio) fetches.unsent = supabase.from("unsent_thoughts").select("*").eq("user_id", pid).order("created_at", { ascending: false });
 
-    Promise.all(Object.entries(fetches).map(async ([k, p]) => [k, (await p).data] as const)).then((entries) => {
+    Promise.all(Object.entries(fetches).map(async ([k, p]) => [k, (await Promise.resolve(p) as any).data] as const)).then((entries) => {
       setPartnerData(Object.fromEntries(entries));
     });
   }, [partner, partnerProfile]);
