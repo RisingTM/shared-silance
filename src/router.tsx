@@ -1,5 +1,8 @@
 import { createRouter, useRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
+import { installServerFnAuthFetch } from "./lib/server-fn-auth";
+
+installServerFnAuthFetch();
 
 function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();

@@ -13,6 +13,7 @@ import { Route as UnlockRouteImport } from './routes/unlock'
 import { Route as TodayRouteImport } from './routes/today'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as SetPasswordRouteImport } from './routes/set-password'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PrivateRouteImport } from './routes/private'
 import { Route as DuaRouteImport } from './routes/dua'
 import { Route as CounterRouteImport } from './routes/counter'
@@ -36,6 +37,11 @@ const SetupRoute = SetupRouteImport.update({
 const SetPasswordRoute = SetPasswordRouteImport.update({
   id: '/set-password',
   path: '/set-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivateRoute = PrivateRouteImport.update({
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/counter': typeof CounterRoute
   '/dua': typeof DuaRoute
   '/private': typeof PrivateRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
   '/setup': typeof SetupRoute
   '/today': typeof TodayRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/counter': typeof CounterRoute
   '/dua': typeof DuaRoute
   '/private': typeof PrivateRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
   '/setup': typeof SetupRoute
   '/today': typeof TodayRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/counter': typeof CounterRoute
   '/dua': typeof DuaRoute
   '/private': typeof PrivateRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
   '/setup': typeof SetupRoute
   '/today': typeof TodayRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/counter'
     | '/dua'
     | '/private'
+    | '/reset-password'
     | '/set-password'
     | '/setup'
     | '/today'
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/counter'
     | '/dua'
     | '/private'
+    | '/reset-password'
     | '/set-password'
     | '/setup'
     | '/today'
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/counter'
     | '/dua'
     | '/private'
+    | '/reset-password'
     | '/set-password'
     | '/setup'
     | '/today'
@@ -128,6 +140,7 @@ export interface RootRouteChildren {
   CounterRoute: typeof CounterRoute
   DuaRoute: typeof DuaRoute
   PrivateRoute: typeof PrivateRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   SetPasswordRoute: typeof SetPasswordRoute
   SetupRoute: typeof SetupRoute
   TodayRoute: typeof TodayRoute
@@ -162,6 +175,13 @@ declare module '@tanstack/react-router' {
       path: '/set-password'
       fullPath: '/set-password'
       preLoaderRoute: typeof SetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/private': {
@@ -200,6 +220,7 @@ const rootRouteChildren: RootRouteChildren = {
   CounterRoute: CounterRoute,
   DuaRoute: DuaRoute,
   PrivateRoute: PrivateRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   SetPasswordRoute: SetPasswordRoute,
   SetupRoute: SetupRoute,
   TodayRoute: TodayRoute,
