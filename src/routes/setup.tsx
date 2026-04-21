@@ -23,11 +23,10 @@ function SetupPage() {
 
   const [ownerName, setOwnerName] = useState("");
   const [partnerUsername, setPartnerUsername] = useState("");
+  const [partnerPassword, setPartnerPassword] = useState("");
   const [partnerName, setPartnerName] = useState("");
   const [ncDate, setNcDate] = useState(new Date().toISOString().slice(0, 10));
   const [submitting, setSubmitting] = useState(false);
-  const [tempPwd, setTempPwd] = useState<string | null>(null);
-  const [partnerLogin, setPartnerLogin] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,14 +36,14 @@ function SetupPage() {
         data: {
           ownerDisplayName: ownerName,
           partnerUsername: partnerUsername,
+          partnerPassword,
           partnerDisplayName: partnerName,
           ncStartDate: ncDate,
         },
       });
-      setTempPwd(res.tempPassword);
-      setPartnerLogin(res.partnerUsername);
       toast.success("Journey created");
       await refresh();
+      nav({ to: "/today" });
     } catch (err: any) {
       console.error("Setup failed:", err);
       let msg = err?.message;
@@ -57,32 +56,12 @@ function SetupPage() {
     }
   };
 
-  if (tempPwd) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="parchment-card rounded-2xl p-10 max-w-lg w-full text-center">
-          <h1 className="font-display text-2xl tracking-widest text-primary">SHARE THIS WITH HER</h1>
-          <p className="mt-4 text-muted-foreground italic">
-            She will use this once to sign in, then set her own password — one only she will know.
-          </p>
-          <div className="mt-6 space-y-2 text-left bg-secondary/40 rounded-lg p-4 font-mono text-sm break-all">
-            <div><span className="text-muted-foreground">Username: </span><strong>{partnerLogin}</strong></div>
-            <div><span className="text-muted-foreground">Temporary password: </span><strong>{tempPwd}</strong></div>
-          </div>
-          <Button className="mt-6 w-full" onClick={() => nav({ to: "/today" })}>
-            I've shared it. Continue.
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-10">
       <div className="parchment-card rounded-2xl p-8 max-w-lg w-full">
         <h1 className="font-display text-2xl tracking-widest text-center text-primary">SET UP THE JOURNEY</h1>
         <p className="text-center text-sm text-muted-foreground italic mt-2">
-          You're creating both accounts. She'll set her own password the first time she signs in.
+          You're creating both accounts now: username and password for each of you.
         </p>
 
         <form onSubmit={submit} className="mt-8 space-y-4">
@@ -93,6 +72,10 @@ function SetupPage() {
           <div>
             <Label className="font-display text-xs uppercase tracking-widest">Her username</Label>
             <Input required value={partnerUsername} onChange={(e) => setPartnerUsername(e.target.value)} placeholder="letters, numbers, . _ -" />
+          </div>
+          <div>
+            <Label className="font-display text-xs uppercase tracking-widest">Her password</Label>
+            <Input type="password" required minLength={8} value={partnerPassword} onChange={(e) => setPartnerPassword(e.target.value)} />
           </div>
           <div>
             <Label className="font-display text-xs uppercase tracking-widest">Her name</Label>

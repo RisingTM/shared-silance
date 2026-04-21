@@ -4,36 +4,45 @@ import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useSession } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
-import { STATUS_OPTIONS, statusMeta, type StatusKey } from "@/lib/statuses";
-import { regeneratePartnerTempPassword } from "@/server/journey.functions";
+import { MILESTONES, STATUS_OPTIONS, daysBetween, statusMeta, type StatusKey } from "@/lib/statuses";
+import { resetCounter } from "@/server/journey.functions";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { History, KeyRound } from "lucide-react";
+import { History } from "lucide-react";
 
 export const Route = createFileRoute("/today")({
   component: () => (<RequireAuth><AppShell><TodayPage /></AppShell></RequireAuth>),
 });
 
 type Row = { id: string; user_id: string; status: string; created_at: string };
+type Break = { id: string; broken_by: "him" | "her"; note: string | null; created_at: string };
 
 function TodayPage() {
-  const { profile, partnerProfile, journey } = useSession();
+  const { profile, partnerProfile, journey, refresh } = useSession();
   const [mine, setMine] = useState<Row | null>(null);
   const [theirs, setTheirs] = useState<Row | null>(null);
   const [history, setHistory] = useState<Row[]>([]);
+  const [breaks, setBreaks] = useState<Break[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [busyReset, setBusyReset] = useState(false);
+  const [who, setWho] = useState<"him" | "her">("him");
+  const [note, setNote] = useState("");
 
   const load = async () => {
     if (!journey || !profile) return;
-    const { data: all } = await supabase
-      .from("daily_statuses")
-      .select("*")
-      .eq("journey_id", journey.id)
-      .order("created_at", { ascending: false });
+    const [{ data: all }, { data: allBreaks }] = await Promise.all([
+      supabase.from("daily_statuses").select("*").eq("journey_id", journey.id).order("created_at", { ascending: false }),
+      supabase.from("nc_breaks").select("*").eq("journey_id", journey.id).order("created_at", { ascending: false }),
+    ]);
     const rows = (all ?? []) as Row[];
     setHistory(rows);
+    setBreaks((allBreaks ?? []) as Break[]);
     setMine(rows.find((r) => r.user_id === profile.id) ?? null);
     if (partnerProfile) setTheirs(rows.find((r) => r.user_id === partnerProfile.id) ?? null);
   };
@@ -64,12 +73,80 @@ function TodayPage() {
     const m = Math.floor((ms % 3600000) / 60000);
     return `${h}h ${m}m`;
   })();
+  const noContactDays = journey ? daysBetween(journey.nc_start_date) : 0;
+  const metDays = noContactDays;
+
+  const submitReset = async () => {
+    setBusyReset(true);
+    try {
+      await resetCounter({ data: { brokenBy: who, note: note.trim() || undefined } });
+      toast.success("Counter reset. Begin again.");
+      setResetOpen(false);
+      setNote("");
+      await refresh();
+      await load();
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not reset counter");
+    } finally {
+      setBusyReset(false);
+    }
+  };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="text-center">
         <h2 className="font-display text-3xl tracking-widest text-primary">TODAY</h2>
-        <p className="text-muted-foreground italic mt-1">A single word for each other.</p>
+        <p className="text-muted-foreground italic mt-1">Your journey at a glance.</p>
+      </div>
+
+      <div className="parchment-card rounded-2xl p-6 text-center space-y-4">
+        <p className="font-display text-xs uppercase tracking-[0.35em] text-muted-foreground">Days of no contact</p>
+        <div className="font-display text-6xl text-primary tabular-nums">{noContactDays}</div>
+        <p className="text-xs text-muted-foreground">Since {journey ? new Date(journey.nc_start_date + "T00:00").toLocaleDateString() : "—"}</p>
+        <div className="flex flex-wrap justify-center gap-2">
+          {MILESTONES.map((m) => (
+            <span
+              key={m}
+              className={[
+                "rounded-full border px-3 py-1 text-xs font-display tracking-widest",
+                noContactDays >= m ? "border-primary/40 bg-primary/15 text-primary" : "border-border bg-muted text-muted-foreground",
+              ].join(" ")}
+            >
+              {m}d
+            </span>
+          ))}
+        </div>
+        <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="w-full h-11">Reset counter</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle className="font-display tracking-widest">RESET COUNTER</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label className="font-display text-xs uppercase tracking-widest">Who broke it?</Label>
+                <RadioGroup value={who} onValueChange={(v) => setWho(v as "him" | "her")} className="mt-2 flex gap-6">
+                  <label className="flex items-center gap-2"><RadioGroupItem value="him" /> Him</label>
+                  <label className="flex items-center gap-2"><RadioGroupItem value="her" /> Her</label>
+                </RadioGroup>
+              </div>
+              <div>
+                <Label className="font-display text-xs uppercase tracking-widest">What happened (optional)</Label>
+                <Textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={3} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setResetOpen(false)}>Cancel</Button>
+              <Button onClick={submitReset} disabled={busyReset}>{busyReset ? "Resetting…" : "Confirm reset"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="parchment-card rounded-2xl p-6 text-center">
+        <p className="font-display text-xs uppercase tracking-[0.35em] text-muted-foreground">Days since we met</p>
+        <div className="mt-2 font-display text-5xl text-primary tabular-nums">{metDays}</div>
+        <p className="text-xs text-muted-foreground mt-2">Using your journey start date</p>
       </div>
 
       <div className="grid sm:grid-cols-2 gap-4">
@@ -96,6 +173,24 @@ function TodayPage() {
         </div>
       </div>
 
+      {(journey?.has_been_reset || breaks.length > 0) && (
+        <div className="parchment-card rounded-2xl p-6">
+          <h3 className="font-display text-sm uppercase tracking-widest text-muted-foreground mb-4">Break log</h3>
+          {breaks.length === 0 && <p className="text-sm italic text-muted-foreground">No breaks recorded.</p>}
+          <ul className="space-y-3">
+            {breaks.map((b) => (
+              <li key={b.id} className="border-b border-border/40 pb-3 last:border-0">
+                <div className="flex justify-between items-baseline">
+                  <span className="font-display text-sm tracking-widest">{b.broken_by === "him" ? "HIM" : "HER"}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(b.created_at).toLocaleDateString()}</span>
+                </div>
+                {b.note && <p className="text-sm text-muted-foreground mt-1 italic">"{b.note}"</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <Dialog>
         <DialogTrigger asChild>
           <Button variant="outline" className="w-full"><History className="size-4" /> View history</Button>
@@ -119,61 +214,7 @@ function TodayPage() {
           </ScrollArea>
         </DialogContent>
       </Dialog>
-
-      {profile?.role === "owner" && <RegeneratePartnerPassword />}
     </div>
-  );
-}
-
-function RegeneratePartnerPassword() {
-  const [open, setOpen] = useState(false);
-  const [result, setResult] = useState<{ username: string; tempPassword: string } | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const run = async () => {
-    setLoading(true);
-    try {
-      const r = await regeneratePartnerTempPassword();
-      setResult(r);
-      toast.success("New temporary password generated");
-    } catch (err: any) {
-      toast.error(err?.message ?? "Failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setResult(null); }}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="w-full text-xs italic text-muted-foreground hover:text-primary">
-          <KeyRound className="size-3.5" /> She forgot her password — generate a new temporary one
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle className="font-display tracking-widest">RESET HER PASSWORD</DialogTitle></DialogHeader>
-        {!result ? (
-          <>
-            <p className="text-sm text-muted-foreground italic">
-              This creates a new temporary password for her. She'll use it once to sign in, then set a new private password.
-              Her existing password (if she set one) will stop working.
-            </p>
-            <Button onClick={run} disabled={loading} className="w-full">
-              {loading ? "Generating…" : "Generate new temporary password"}
-            </Button>
-          </>
-        ) : (
-          <>
-            <p className="text-sm text-muted-foreground italic">Share this with her. Shows only once.</p>
-            <div className="space-y-2 text-left bg-secondary/40 rounded-lg p-4 font-mono text-sm break-all">
-              <div><span className="text-muted-foreground">Username: </span><strong>{result.username}</strong></div>
-              <div><span className="text-muted-foreground">Temporary password: </span><strong>{result.tempPassword}</strong></div>
-            </div>
-            <Button onClick={() => setOpen(false)} className="w-full">I've shared it</Button>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
   );
 }
 

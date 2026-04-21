@@ -14,10 +14,6 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     }
     if (user && !profile) {
       nav({ to: "/setup" });
-      return;
-    }
-    if (profile?.must_set_password) {
-      nav({ to: "/set-password" });
     }
   }, [loading, user, profile, nav]);
 
@@ -28,6 +24,6 @@ export function RequireAuth({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  if (!user || !profile || profile.must_set_password) return null;
+  if (!user || !profile) return null;
   return <>{children}</>;
 }

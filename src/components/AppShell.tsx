@@ -2,12 +2,11 @@ import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
 import { useSession, signOut } from "@/lib/session";
 import { Button } from "@/components/ui/button";
-import { LogOut, Heart, Calendar, Sparkles, BookOpen, Unlock } from "lucide-react";
+import { LogOut, Heart, Sparkles, BookOpen, Unlock, Moon, Sun } from "lucide-react";
 import { OnboardingTour } from "./OnboardingTour";
 
 const TABS = [
   { to: "/today", label: "Today", icon: Heart },
-  { to: "/counter", label: "Counter", icon: Calendar },
   { to: "/private", label: "Private", icon: Sparkles },
   { to: "/dua", label: "Dua", icon: BookOpen },
   { to: "/unlock", label: "Unlock", icon: Unlock },
@@ -17,6 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user, profile } = useSession();
   const loc = useLocation();
   const [tourOpen, setTourOpen] = useState(false);
+  const [dark, setDark] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -25,6 +25,18 @@ export function AppShell({ children }: { children: ReactNode }) {
       setTourOpen(true);
     }
   }, [user]);
+
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem("our-journey:theme") : null;
+    const preferDark = saved ? saved === "dark" : false;
+    setDark(preferDark);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.classList.toggle("dark", dark);
+    window.localStorage.setItem("our-journey:theme", dark ? "dark" : "light");
+  }, [dark]);
 
   const closeTour = () => {
     if (user && typeof window !== "undefined") {
@@ -35,8 +47,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="border-b border-border/60 bg-card/60 backdrop-blur">
-        <div className="mx-auto max-w-5xl px-4 py-4 flex items-center justify-between gap-4">
+      <header className="border-b border-border/60 bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+        <div className="mx-auto w-full max-w-3xl px-4 py-4 flex items-center justify-between gap-3">
           <div className="flex flex-col">
             <span className="font-arabic text-2xl text-primary leading-none">بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</span>
             <span className="font-display text-xs uppercase tracking-[0.3em] text-muted-foreground mt-1">
@@ -49,13 +61,19 @@ export function AppShell({ children }: { children: ReactNode }) {
                 Salaam, <span className="text-foreground font-medium">{profile.display_name ?? profile.username}</span>
               </span>
             )}
+            <Button variant="ghost" size="icon" onClick={() => setDark((v) => !v)} aria-label="Toggle dark mode">
+              {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            </Button>
+            {profile && (
+              <span className="sm:hidden text-xs text-muted-foreground">{profile.display_name ?? profile.username}</span>
+            )}
             <Button variant="ghost" size="sm" onClick={() => signOut().then(() => (window.location.href = "/"))}>
               <LogOut className="size-4" />
               <span className="hidden sm:inline">Sign out</span>
             </Button>
           </div>
         </div>
-        <nav className="mx-auto max-w-5xl px-2 pb-2 flex gap-1 overflow-x-auto">
+        <nav className="mx-auto hidden w-full max-w-3xl px-2 pb-2 sm:flex gap-1 overflow-x-auto">
           {TABS.map((t) => {
             const active = loc.pathname.startsWith(t.to);
             const Icon = t.icon;
@@ -78,7 +96,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
       </header>
 
-      <main className="flex-1 mx-auto max-w-5xl w-full px-4 py-8">{children}</main>
+      <main className="flex-1 mx-auto w-full max-w-3xl px-4 py-6 pb-24 sm:pb-8">{children}</main>
 
       <footer className="border-t border-border/60 bg-card/40 mt-8">
         <div className="mx-auto max-w-3xl px-4 py-6 text-center">
@@ -96,6 +114,28 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
       </footer>
+
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-card/95 backdrop-blur sm:hidden">
+        <div className="mx-auto grid max-w-3xl grid-cols-4 gap-1 px-2 py-2">
+          {TABS.map((t) => {
+            const active = loc.pathname.startsWith(t.to);
+            const Icon = t.icon;
+            return (
+              <Link
+                key={t.to}
+                to={t.to}
+                className={[
+                  "flex min-h-12 flex-col items-center justify-center rounded-md text-[11px] uppercase tracking-wider",
+                  active ? "bg-primary/15 text-primary" : "text-muted-foreground",
+                ].join(" ")}
+              >
+                <Icon className="size-4" />
+                {t.label}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
 
       <OnboardingTour open={tourOpen} onClose={closeTour} />
     </div>

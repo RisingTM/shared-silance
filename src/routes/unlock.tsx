@@ -16,15 +16,9 @@ export const Route = createFileRoute("/unlock")({
 });
 
 const SECTIONS = [
-  { k: "share_why", l: "Why I'm Here" },
   { k: "share_journal", l: "Journal" },
-  { k: "share_strong", l: "Stayed Strong log" },
-  { k: "share_triggers", l: "Trigger log" },
   { k: "share_mood", l: "Mood history" },
   { k: "share_goals", l: "Goals" },
-  { k: "share_letter", l: "Sealed letter" },
-  { k: "share_building", l: "Building Toward" },
-  { k: "share_reflections", l: "Weekly reflections" },
   { k: "share_worship", l: "Worship log" },
   { k: "share_unsent_text", l: "Unsent thoughts (text)" },
   { k: "share_unsent_audio", l: "Unsent thoughts (audio)" },
@@ -54,15 +48,9 @@ function UnlockPage() {
     if (!partnerProfile || !partner?.is_unlocked) return;
     const pid = partnerProfile.id;
     const fetches: Record<string, PromiseLike<any>> = {};
-    if (partner.share_why) fetches.why = supabase.from("why_notes").select("content").eq("user_id", pid).maybeSingle();
-    if (partner.share_building) fetches.building = supabase.from("building_notes").select("content").eq("user_id", pid).maybeSingle();
-    if (partner.share_letter) fetches.letter = supabase.from("sealed_letters").select("content,sealed_at").eq("user_id", pid).maybeSingle();
     if (partner.share_journal) fetches.journal = supabase.from("journal_entries").select("*").eq("user_id", pid).order("created_at", { ascending: false });
-    if (partner.share_strong) fetches.strong = supabase.from("strong_moments").select("*").eq("user_id", pid).order("created_at", { ascending: false });
-    if (partner.share_triggers) fetches.triggers = supabase.from("trigger_logs").select("*").eq("user_id", pid).order("created_at", { ascending: false });
     if (partner.share_mood) fetches.mood = supabase.from("mood_entries").select("*").eq("user_id", pid).order("entry_date", { ascending: false });
     if (partner.share_goals) fetches.goals = supabase.from("goals").select("*").eq("user_id", pid).order("created_at", { ascending: false });
-    if (partner.share_reflections) fetches.reflect = supabase.from("weekly_reflections").select("*").eq("user_id", pid).order("year_week", { ascending: false });
     if (partner.share_worship) fetches.worship = supabase.from("worship_logs").select("*").eq("user_id", pid).order("entry_date", { ascending: false });
     if (partner.share_unsent_text || partner.share_unsent_audio) fetches.unsent = supabase.from("unsent_thoughts").select("*").eq("user_id", pid).order("created_at", { ascending: false });
 
@@ -113,14 +101,6 @@ function UnlockPage() {
           <p className="text-muted-foreground italic">Nothing yet.</p>
         ) : (
           <div className="space-y-6">
-            {partnerData.why && <Section title="Why I'm Here"><p className="whitespace-pre-wrap leading-relaxed">{partnerData.why.content}</p></Section>}
-            {partnerData.building && <Section title="Building Toward"><p className="whitespace-pre-wrap leading-relaxed">{partnerData.building.content}</p></Section>}
-            {partnerData.letter && (
-              <Section title="Sealed Letter">
-                <p className="text-xs text-muted-foreground">Sealed {new Date(partnerData.letter.sealed_at).toLocaleDateString()}</p>
-                <p className="whitespace-pre-wrap leading-relaxed mt-2 italic">{partnerData.letter.content}</p>
-              </Section>
-            )}
             {partnerData.journal?.length > 0 && (
               <Section title="Journal">
                 {partnerData.journal.map((j: any) => (
@@ -132,16 +112,6 @@ function UnlockPage() {
                 ))}
               </Section>
             )}
-            {partnerData.strong?.length > 0 && (
-              <Section title="Stayed Strong">
-                <ul className="space-y-1">{partnerData.strong.map((r: any) => <li key={r.id} className="text-sm">· {r.note}</li>)}</ul>
-              </Section>
-            )}
-            {partnerData.triggers?.length > 0 && (
-              <Section title="Triggers">
-                <ul className="space-y-2">{partnerData.triggers.map((r: any) => <li key={r.id} className="text-sm"><strong>{r.what_happened}</strong>{r.the_urge && ` — ${r.the_urge}`}</li>)}</ul>
-              </Section>
-            )}
             {partnerData.mood?.length > 0 && (
               <Section title="Mood">
                 <div className="flex flex-wrap gap-2">{partnerData.mood.map((m: any) => <span key={m.id} className="text-2xl" title={m.entry_date}>{m.mood}</span>)}</div>
@@ -150,17 +120,6 @@ function UnlockPage() {
             {partnerData.goals?.length > 0 && (
               <Section title="Goals">
                 <ul className="space-y-1">{partnerData.goals.map((g: any) => <li key={g.id} className="text-sm">{g.done ? "✓" : "○"} {g.title}</li>)}</ul>
-              </Section>
-            )}
-            {partnerData.reflect?.length > 0 && (
-              <Section title="Reflections">
-                {partnerData.reflect.map((r: any) => (
-                  <div key={r.id} className="py-2 border-b border-border/40">
-                    <p className="text-xs text-muted-foreground">{r.year_week}</p>
-                    <p className="font-display">{r.question}</p>
-                    <p className="mt-1 whitespace-pre-wrap">{r.answer}</p>
-                  </div>
-                ))}
               </Section>
             )}
             {partnerData.worship?.length > 0 && (

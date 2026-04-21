@@ -8,6 +8,7 @@ import { z } from "zod";
 const setupSchema = z.object({
   ownerDisplayName: z.string().trim().min(1).max(60),
   partnerUsername: z.string().trim().min(2).max(40).regex(/^[a-zA-Z0-9_.-]+$/, "Letters, numbers, . _ - only"),
+  partnerPassword: z.string().min(8).max(120),
   partnerDisplayName: z.string().trim().min(1).max(60),
   ncStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
@@ -42,10 +43,18 @@ export const setupJourney = createServerFn({ method: "POST" })
       .single();
     if (jErr || !journey) throw new Error(jErr?.message ?? "Failed to create journey");
 
-    // Owner profile (owner has email already)
+    // Owner profile (owner auth account is created with an internal email)
     const { data: ownerUser } = await supabaseAdmin.auth.admin.getUserById(ownerId);
+    const metadataUsername = (ownerUser?.user?.user_metadata?.username as string | undefined)?.toLowerCase().trim();
     const ownerEmailLocal = (ownerUser?.user?.email ?? "owner").split("@")[0].toLowerCase().replace(/[^a-z0-9_.-]/g, "");
-    const ownerUsername = ownerEmailLocal || `owner_${ownerId.slice(0, 6)}`;
+    const ownerUsername = (metadataUsername || ownerEmailLocal || `owner_${ownerId.slice(0, 6)}`).replace(/[^a-z0-9_.-]/g, "");
+
+    const { data: ownerTaken } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .eq("username", ownerUsername)
+      .maybeSingle();
+    if (ownerTaken) throw new Error("Your username is already taken");
 
     const { error: opErr } = await supabaseAdmin.from("profiles").insert({
       id: ownerId,
@@ -57,12 +66,12 @@ export const setupJourney = createServerFn({ method: "POST" })
     });
     if (opErr) throw new Error(opErr.message);
 
-    // Create partner auth user with synthetic email + temp password
-    const partnerEmail = `${data.partnerUsername.toLowerCase()}@journey.local`;
-    const tempPassword = crypto.randomUUID() + "Aa1!";
+    // Create partner auth user with synthetic email + provided password
+    const partnerEmail = `${data.partnerUsername.toLowerCase()}@internal.app`;
+    const partnerPassword = data.partnerPassword;
     const { data: partnerCreated, error: pErr } = await supabaseAdmin.auth.admin.createUser({
       email: partnerEmail,
-      password: tempPassword,
+      password: partnerPassword,
       email_confirm: true,
       user_metadata: { username: data.partnerUsername.toLowerCase(), partner: true },
     });
@@ -74,14 +83,14 @@ export const setupJourney = createServerFn({ method: "POST" })
       username: data.partnerUsername.toLowerCase(),
       display_name: data.partnerDisplayName,
       role: "partner",
-      must_set_password: true,
+      must_set_password: false,
     });
     if (ppErr) throw new Error(ppErr.message);
 
-    return { ok: true, partnerUsername: data.partnerUsername.toLowerCase(), tempPassword };
+    return { ok: true, partnerUsername: data.partnerUsername.toLowerCase() };
   });
 
-// ----- Partner: log in by username (server resolves to email) -----
+// ----- Username login helper: resolves username -> internal email -----
 const loginSchema = z.object({
   username: z.string().trim().min(2).max(40),
 });
@@ -91,20 +100,16 @@ export const partnerEmailForUsername = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { data: profile, error } = await supabaseAdmin
       .from("profiles")
-      .select("id, role")
+      .select("id")
       .eq("username", data.username.toLowerCase())
       .maybeSingle();
     if (error || !profile) throw new Error("Username not found");
-    if (profile.role !== "partner") throw new Error("This account uses email login");
     const { data: u } = await supabaseAdmin.auth.admin.getUserById(profile.id);
     if (!u.user?.email) throw new Error("Account not configured");
     return { email: u.user.email };
   });
 
-// ----- Partner first-login: get their bootstrap temp password -----
-// Owner sees this once after setup; partner uses it once to log in, then sets her own.
-// We store a hint by re-deriving via admin reset; simpler: owner shares the temp password.
-// Here we provide an endpoint to update the partner's password after authentication.
+// ----- Update your own password -----
 const setPwdSchema = z.object({ newPassword: z.string().min(8).max(120) });
 
 export const setOwnPassword = createServerFn({ method: "POST" })
@@ -123,7 +128,7 @@ export const setOwnPassword = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ----- Owner: regenerate partner's temp password (in case it was lost) -----
+// ----- Owner: regenerate partner password -----
 export const regeneratePartnerTempPassword = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -148,10 +153,7 @@ export const regeneratePartnerTempPassword = createServerFn({ method: "POST" })
       password: tempPassword,
     });
     if (error) throw new Error(error.message);
-    await supabaseAdmin
-      .from("profiles")
-      .update({ must_set_password: true })
-      .eq("id", partner.id);
+    await supabaseAdmin.from("profiles").update({ must_set_password: false }).eq("id", partner.id);
 
     return { username: partner.username, tempPassword };
   });

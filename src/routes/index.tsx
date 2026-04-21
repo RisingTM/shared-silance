@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { partnerEmailForUsername } from "@/server/journey.functions";
@@ -22,44 +22,33 @@ function LandingPage() {
     });
   }, [nav]);
 
-  // Owner email signup
-  const [oEmail, setOEmail] = useState("");
+  // Username signup
+  const [oUsername, setOUsername] = useState("");
   const [oPwd, setOPwd] = useState("");
+  const toInternalEmail = (username: string) => `${username.toLowerCase()}@internal.app`;
   const handleOwnerSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    const username = oUsername.trim().toLowerCase();
     const { error } = await supabase.auth.signUp({
-      email: oEmail,
+      email: toInternalEmail(username),
       password: oPwd,
-      options: { emailRedirectTo: window.location.origin + "/setup" },
+      options: { data: { username } },
     });
     setLoading(false);
     if (error) return toast.error(error.message);
-    toast.success("Account created. Continuing…");
-    // immediately redirect to setup (auto sign-in usually present without confirm)
+    toast.success("Account created. Continue setup.");
     setTimeout(() => nav({ to: "/setup" }), 200);
   };
-  // Owner email login
-  const [liEmail, setLiEmail] = useState("");
+  // Username login
+  const [liUsername, setLiUsername] = useState("");
   const [liPwd, setLiPwd] = useState("");
-  const handleOwnerLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: liEmail, password: liPwd });
-    setLoading(false);
-    if (error) return toast.error(error.message);
-    nav({ to: "/today" });
-  };
-
-  // Partner login
-  const [pUser, setPUser] = useState("");
-  const [pPwd, setPPwd] = useState("");
-  const handlePartnerLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const { email } = await partnerEmailForUsername({ data: { username: pUser } });
-      const { error } = await supabase.auth.signInWithPassword({ email, password: pPwd });
+      const { email } = await partnerEmailForUsername({ data: { username: liUsername } });
+      const { error } = await supabase.auth.signInWithPassword({ email, password: liPwd });
       if (error) throw error;
       nav({ to: "/today" });
     } catch (err: any) {
@@ -67,20 +56,6 @@ function LandingPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Forgot password (owner only)
-  const [showReset, setShowReset] = useState(false);
-  const [resetEmail, setResetEmail] = useState("");
-  const handleSendReset = async () => {
-    setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: window.location.origin + "/reset-password",
-    });
-    setLoading(false);
-    if (error) return toast.error(error.message);
-    toast.success("Recovery email sent. Check your inbox.");
-    setShowReset(false);
   };
 
   return (
@@ -97,87 +72,40 @@ function LandingPage() {
         </div>
 
         <div className="parchment-card rounded-2xl p-8">
-          <Tabs defaultValue="owner-login" className="w-full">
-            <TabsList className="grid grid-cols-3 w-full bg-secondary/50">
-              <TabsTrigger value="owner-login">Sign in</TabsTrigger>
-              <TabsTrigger value="partner-login">Partner</TabsTrigger>
+          <Tabs defaultValue="login" className="w-full">
+            <TabsList className="grid grid-cols-2 w-full bg-secondary/50">
+              <TabsTrigger value="login">Sign in</TabsTrigger>
               <TabsTrigger value="owner-signup">Begin</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="owner-login" className="pt-6">
-              <form onSubmit={handleOwnerLogin} className="space-y-4">
+            <TabsContent value="login" className="pt-6">
+              <form onSubmit={handleLogin} className="space-y-4">
                 <div>
-                  <Label className="font-display text-xs uppercase tracking-widest">Email</Label>
-                  <Input type="email" required value={liEmail} onChange={(e) => setLiEmail(e.target.value)} />
+                  <Label className="font-display text-xs uppercase tracking-widest">Username</Label>
+                  <Input required value={liUsername} onChange={(e) => setLiUsername(e.target.value)} />
                 </div>
                 <div>
                   <Label className="font-display text-xs uppercase tracking-widest">Password</Label>
                   <Input type="password" required value={liPwd} onChange={(e) => setLiPwd(e.target.value)} />
                 </div>
-                <Button type="submit" disabled={loading} className="w-full">Sign in</Button>
-                <div className="text-center">
-                  <button
-                    type="button"
-                    onClick={() => setShowReset((v) => !v)}
-                    className="text-xs italic text-muted-foreground hover:text-primary underline-offset-4 hover:underline"
-                  >
-                    Forgot password? (email accounts only)
-                  </button>
-                </div>
-                {showReset && (
-                  <div className="rounded-md border border-border/60 bg-secondary/30 p-3 space-y-2">
-                    <Label className="font-display text-xs uppercase tracking-widest">Email for recovery</Label>
-                    <Input
-                      type="email"
-                      value={resetEmail}
-                      onChange={(e) => setResetEmail(e.target.value)}
-                      placeholder="you@example.com"
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={loading || !resetEmail}
-                      onClick={handleSendReset}
-                      className="w-full"
-                    >
-                      Send recovery link
-                    </Button>
-                  </div>
-                )}
-              </form>
-            </TabsContent>
-
-            <TabsContent value="partner-login" className="pt-6">
-              <p className="text-sm text-muted-foreground mb-4 italic">
-                Sign in with the username he set for you.
-              </p>
-              <form onSubmit={handlePartnerLogin} className="space-y-4">
-                <div>
-                  <Label className="font-display text-xs uppercase tracking-widest">Username</Label>
-                  <Input required value={pUser} onChange={(e) => setPUser(e.target.value)} />
-                </div>
-                <div>
-                  <Label className="font-display text-xs uppercase tracking-widest">Password</Label>
-                  <Input type="password" required value={pPwd} onChange={(e) => setPPwd(e.target.value)} />
-                </div>
-                <Button type="submit" disabled={loading} className="w-full">Enter</Button>
+                <Button type="submit" disabled={loading} className="w-full h-11">Sign in</Button>
               </form>
             </TabsContent>
 
             <TabsContent value="owner-signup" className="pt-6">
               <p className="text-sm text-muted-foreground mb-4 italic">
-                Create your account. After this, you'll set up her username on the next step.
+                Create your username and password, then continue to setup.
               </p>
               <form onSubmit={handleOwnerSignup} className="space-y-4">
                 <div>
-                  <Label className="font-display text-xs uppercase tracking-widest">Your email</Label>
-                  <Input type="email" required value={oEmail} onChange={(e) => setOEmail(e.target.value)} />
+                  <Label className="font-display text-xs uppercase tracking-widest">Your username</Label>
+                  <Input required value={oUsername} onChange={(e) => setOUsername(e.target.value)} />
                 </div>
                 <div>
                   <Label className="font-display text-xs uppercase tracking-widest">Password</Label>
                   <Input type="password" required minLength={8} value={oPwd} onChange={(e) => setOPwd(e.target.value)} />
                 </div>
-                <Button type="submit" disabled={loading} className="w-full">Begin the journey</Button>
+                <Button type="submit" disabled={loading} className="w-full h-11">Begin the journey</Button>
               </form>
             </TabsContent>
           </Tabs>

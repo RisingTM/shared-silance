@@ -70,30 +70,30 @@
 }
 
 .dark {
-  --background: oklch(0.18 0.02 50);
-  --foreground: var(--cream);
-  --card: oklch(0.22 0.025 50);
+  --background: oklch(0.16 0.015 55);
+  --foreground: oklch(0.9 0.02 80);
+  --card: oklch(0.21 0.02 52);
   --card-foreground: var(--cream);
-  --popover: oklch(0.22 0.025 50);
+  --popover: oklch(0.21 0.02 52);
   --popover-foreground: var(--cream);
-  --primary: var(--gold);
-  --primary-foreground: oklch(0.18 0.02 50);
-  --secondary: oklch(0.3 0.03 50);
+  --primary: oklch(0.7 0.11 80);
+  --primary-foreground: oklch(0.18 0.02 55);
+  --secondary: oklch(0.28 0.025 55);
   --secondary-foreground: var(--cream);
-  --muted: oklch(0.28 0.025 50);
-  --muted-foreground: oklch(0.7 0.03 70);
-  --accent: oklch(0.35 0.05 60);
+  --muted: oklch(0.25 0.02 55);
+  --muted-foreground: oklch(0.75 0.02 75);
+  --accent: oklch(0.33 0.04 65);
   --accent-foreground: var(--cream);
   --destructive: oklch(0.5 0.18 30);
   --destructive-foreground: var(--cream);
-  --border: oklch(0.4 0.04 60 / 0.5);
-  --input: oklch(0.3 0.03 50);
-  --ring: var(--gold);
+  --border: oklch(0.42 0.03 70 / 0.45);
+  --input: oklch(0.27 0.02 55);
+  --ring: oklch(0.7 0.11 80);
 }
 
 @layer base {
   * { border-color: var(--color-border); }
-  html, body { font-family: var(--font-body); }
+  html, body { font-family: var(--font-body); overflow-x: hidden; }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
