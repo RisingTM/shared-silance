@@ -5,11 +5,12 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { useSession } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
 import { STATUS_OPTIONS, statusMeta, type StatusKey } from "@/lib/statuses";
+import { regeneratePartnerTempPassword } from "@/server/journey.functions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { History } from "lucide-react";
+import { History, KeyRound } from "lucide-react";
 
 export const Route = createFileRoute("/today")({
   component: () => (<RequireAuth><AppShell><TodayPage /></AppShell></RequireAuth>),
@@ -118,7 +119,61 @@ function TodayPage() {
           </ScrollArea>
         </DialogContent>
       </Dialog>
+
+      {profile?.role === "owner" && <RegeneratePartnerPassword />}
     </div>
+  );
+}
+
+function RegeneratePartnerPassword() {
+  const [open, setOpen] = useState(false);
+  const [result, setResult] = useState<{ username: string; tempPassword: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const run = async () => {
+    setLoading(true);
+    try {
+      const r = await regeneratePartnerTempPassword();
+      setResult(r);
+      toast.success("New temporary password generated");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setResult(null); }}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm" className="w-full text-xs italic text-muted-foreground hover:text-primary">
+          <KeyRound className="size-3.5" /> She forgot her password — generate a new temporary one
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle className="font-display tracking-widest">RESET HER PASSWORD</DialogTitle></DialogHeader>
+        {!result ? (
+          <>
+            <p className="text-sm text-muted-foreground italic">
+              This creates a new temporary password for her. She'll use it once to sign in, then set a new private password.
+              Her existing password (if she set one) will stop working.
+            </p>
+            <Button onClick={run} disabled={loading} className="w-full">
+              {loading ? "Generating…" : "Generate new temporary password"}
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground italic">Share this with her. Shows only once.</p>
+            <div className="space-y-2 text-left bg-secondary/40 rounded-lg p-4 font-mono text-sm break-all">
+              <div><span className="text-muted-foreground">Username: </span><strong>{result.username}</strong></div>
+              <div><span className="text-muted-foreground">Temporary password: </span><strong>{result.tempPassword}</strong></div>
+            </div>
+            <Button onClick={() => setOpen(false)} className="w-full">I've shared it</Button>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
