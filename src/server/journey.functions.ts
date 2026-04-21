@@ -123,6 +123,39 @@ export const setOwnPassword = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// ----- Owner: regenerate partner's temp password (in case it was lost) -----
+export const regeneratePartnerTempPassword = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ownerId = context.userId;
+    const { data: ownerProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("journey_id, role")
+      .eq("id", ownerId)
+      .single();
+    if (!ownerProfile || ownerProfile.role !== "owner") throw new Error("Only the owner can do this");
+
+    const { data: partner } = await supabaseAdmin
+      .from("profiles")
+      .select("id, username")
+      .eq("journey_id", ownerProfile.journey_id)
+      .eq("role", "partner")
+      .single();
+    if (!partner) throw new Error("Partner not found");
+
+    const tempPassword = crypto.randomUUID() + "Aa1!";
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(partner.id, {
+      password: tempPassword,
+    });
+    if (error) throw new Error(error.message);
+    await supabaseAdmin
+      .from("profiles")
+      .update({ must_set_password: true })
+      .eq("id", partner.id);
+
+    return { username: partner.username, tempPassword };
+  });
+
 // ----- Reset NC counter (either user can do this) -----
 const resetSchema = z.object({
   brokenBy: z.enum(["him", "her"]),
