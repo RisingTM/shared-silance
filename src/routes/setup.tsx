@@ -46,7 +46,12 @@ function SetupPage() {
       toast.success("Journey created");
       await refresh();
     } catch (err: any) {
-      toast.error(err.message ?? "Setup failed");
+      console.error("Setup failed:", err);
+      let msg = err?.message;
+      if (err instanceof Response) {
+        try { msg = await err.text(); } catch { msg = `Error ${err.status}`; }
+      }
+      toast.error(msg ?? "Setup failed");
     } finally {
       setSubmitting(false);
     }
