@@ -13,7 +13,9 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { History } from "lucide-react";
+import { History, Heart } from "lucide-react";
+import { insertWithOfflineQueue } from "@/lib/data-client";
+import { notify, requestNotificationPermission } from "@/lib/notifications";
 
 export const Route = createFileRoute("/today")({
   component: () => (<RequireAuth><AppShell><TodayPage /></AppShell></RequireAuth>),
@@ -33,6 +35,9 @@ function TodayPage() {
   const [busyReset, setBusyReset] = useState(false);
   const [who, setWho] = useState<"him" | "her">("him");
   const [note, setNote] = useState("");
+  const [canPing, setCanPing] = useState(true);
+  const [showDigest, setShowDigest] = useState(false);
+  const [digestLine, setDigestLine] = useState<string>("");
 
   const load = async () => {
     if (!journey || !profile) return;
@@ -48,14 +53,74 @@ function TodayPage() {
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [profile?.id, journey?.id, partnerProfile?.id]);
+  useEffect(() => {
+    requestNotificationPermission().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!profile) return;
+    const key = `shared-silance:last-ping:${profile.id}`;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return;
+    const elapsed = Date.now() - Number(raw);
+    setCanPing(elapsed > 3 * 60 * 60 * 1000);
+  }, [profile]);
+
+  useEffect(() => {
+    const now = new Date();
+    setShowDigest(now.getDay() === 0);
+  }, []);
+  useEffect(() => {
+    const loadDigestLine = async () => {
+      if (!profile || !showDigest) return;
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const { data } = await supabase
+        .from("journal_entries")
+        .select("body, body_encrypted")
+        .eq("user_id", profile.id)
+        .lt("created_at", monthStart)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      const lines = (data ?? [])
+        .map((r: any) => (r.body || "").trim())
+        .filter((v: string) => v.length > 0);
+      if (lines.length > 0) setDigestLine(lines[Math.floor(Math.random() * lines.length)]);
+    };
+    loadDigestLine().catch(() => undefined);
+  }, [profile, showDigest]);
+  useEffect(() => {
+    const checkPing = async () => {
+      if (!profile) return;
+      const { data } = await supabase
+        .from("thinking_pings")
+        .select("id, created_at")
+        .eq("recipient_id", profile.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!data) return;
+      const key = `shared-silance:last-seen-ping:${profile.id}`;
+      const seen = window.localStorage.getItem(key);
+      if (seen !== data.id) {
+        await notify("Shared Silance", "Someone is thinking of you right now 🤍");
+        window.localStorage.setItem(key, data.id);
+      }
+    };
+    checkPing().catch(() => undefined);
+  }, [profile]);
 
   const setStatus = async (key: StatusKey) => {
     if (!profile || !journey) return;
     setSubmitting(true);
-    const { error } = await supabase.from("daily_statuses").insert({
+    const { error, queued } = await insertWithOfflineQueue("daily_statuses", {
       user_id: profile.id, journey_id: journey.id, status: key,
     });
     setSubmitting(false);
+    if (queued) {
+      toast.message("You're offline — your entry will sync when you reconnect");
+      return;
+    }
     if (error) {
       toast.error(error.message.includes("12 hours") ? "You've already shared today. Try again in 12 hours." : error.message);
       return;
@@ -74,7 +139,45 @@ function TodayPage() {
     return `${h}h ${m}m`;
   })();
   const noContactDays = journey ? daysBetween(journey.nc_start_date) : 0;
-  const metDays = noContactDays;
+  const talkingDays = journey?.talking_since ? daysBetween(journey.talking_since) : 0;
+  const counterLabel = profile?.counter_label?.trim() || "Days of no contact";
+  const lastCheckInAt = mine ? new Date(mine.created_at).getTime() : 0;
+  const missedWindow = lastCheckInAt > 0 && Date.now() - lastCheckInAt > 24 * 3600 * 1000;
+  const weekCount = history.filter((r) => {
+    const d = new Date(r.created_at);
+    const now = new Date();
+    return d >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+  }).length;
+  const avgMood = "—";
+
+  const sendThinkingPing = async () => {
+    if (!profile || !partnerProfile || !journey || !canPing) return;
+    const { error } = await supabase.from("thinking_pings").insert({
+      journey_id: journey.id,
+      sender_id: profile.id,
+      recipient_id: partnerProfile.id,
+    });
+    if (error) return toast.error(error.message);
+    window.localStorage.setItem(`shared-silance:last-ping:${profile.id}`, String(Date.now()));
+    setCanPing(false);
+    toast.success("Sent.");
+  };
+
+  useEffect(() => {
+    const logMiss = async () => {
+      if (!profile || !mine || !missedWindow) return;
+      const key = `shared-silance:miss-log:${profile.id}:${new Date().toISOString().slice(0, 10)}`;
+      if (window.localStorage.getItem(key)) return;
+      const start = new Date(new Date(mine.created_at).getTime() + 24 * 3600 * 1000);
+      await supabase.from("checkin_miss_log").insert({
+        user_id: profile.id,
+        window_start: mine.created_at,
+        window_end: start.toISOString(),
+      });
+      window.localStorage.setItem(key, "1");
+    };
+    logMiss().catch(() => undefined);
+  }, [profile, mine, missedWindow]);
 
   const submitReset = async () => {
     setBusyReset(true);
@@ -99,8 +202,20 @@ function TodayPage() {
         <p className="text-muted-foreground italic mt-1">Your journey at a glance.</p>
       </div>
 
+      {showDigest && (
+        <div className="parchment-card rounded-2xl p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="text-sm">
+              <p className="font-display tracking-wider">Weekly summary</p>
+              <p className="text-muted-foreground">Check-ins this week: {weekCount} · No-contact: {noContactDays} · Avg mood: {avgMood}</p>
+              {digestLine && <p className="text-muted-foreground mt-1 italic">From a previous month: "{digestLine.slice(0, 140)}"</p>}
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setShowDigest(false)}>Dismiss</Button>
+          </div>
+        </div>
+      )}
       <div className="parchment-card rounded-2xl p-6 text-center space-y-4">
-        <p className="font-display text-xs uppercase tracking-[0.35em] text-muted-foreground">Days of no contact</p>
+        <p className="font-display text-xs uppercase tracking-[0.35em] text-muted-foreground">{counterLabel}</p>
         <div className="font-display text-6xl text-primary tabular-nums">{noContactDays}</div>
         <p className="text-xs text-muted-foreground">Since {journey ? new Date(journey.nc_start_date + "T00:00").toLocaleDateString() : "—"}</p>
         <div className="flex flex-wrap justify-center gap-2">
@@ -144,10 +259,16 @@ function TodayPage() {
       </div>
 
       <div className="parchment-card rounded-2xl p-6 text-center">
-        <p className="font-display text-xs uppercase tracking-[0.35em] text-muted-foreground">Days since we met</p>
-        <div className="mt-2 font-display text-5xl text-primary tabular-nums">{metDays}</div>
-        <p className="text-xs text-muted-foreground mt-2">Using your journey start date</p>
+        <p className="font-display text-xs uppercase tracking-[0.35em] text-muted-foreground">Days since we started talking</p>
+        <div className="mt-2 font-display text-5xl text-primary tabular-nums">{talkingDays}</div>
+        <p className="text-xs text-muted-foreground mt-2">Since {journey?.talking_since ? new Date(`${journey.talking_since}T00:00:00`).toLocaleDateString() : "—"}</p>
       </div>
+
+      {missedWindow && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-muted-foreground">
+          Gentle nudge: you have not checked in yet in your rolling 24-hour window.
+        </div>
+      )}
 
       <div className="grid sm:grid-cols-2 gap-4">
         <StatusCard label="You" name={profile?.display_name ?? "You"} row={mine} />
@@ -171,6 +292,10 @@ function TodayPage() {
             </button>
           ))}
         </div>
+        <Button variant="outline" className="w-full mt-4" onClick={sendThinkingPing} disabled={!canPing}>
+          <Heart className="size-4" />
+          {canPing ? "Thinking of you" : "Thinking ping sent recently"}
+        </Button>
       </div>
 
       {(journey?.has_been_reset || breaks.length > 0) && (

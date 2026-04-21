@@ -12,23 +12,28 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Mic, Square, Trash2, Upload, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { MOOD_EMOJIS, daysBetween } from "@/lib/statuses";
+import { decryptText, encryptText } from "@/lib/crypto";
+import { Lock } from "lucide-react";
 
 export const Route = createFileRoute("/private")({
   component: () => (<RequireAuth><AppShell><PrivatePage /></AppShell></RequireAuth>),
 });
 
 function PrivatePage() {
+  const { profile, journey } = useSession();
+  const canDelete = !!journey?.allow_private_deletes;
   return (
     <div className="space-y-4">
       <div className="text-center">
         <h2 className="font-display text-3xl tracking-widest text-primary">PRIVATE</h2>
         <p className="text-muted-foreground italic mt-1">Only you can see this. Only you ever will.</p>
       </div>
-      <Section title="Journal" defaultOpen><Journal /></Section>
-      <Section title="Unsent Thoughts" defaultOpen><Unsent /></Section>
-      <Section title="Goals"><Goals /></Section>
+      <Section title="Journal" defaultOpen><Journal canDelete={canDelete} /></Section>
+      <Section title="Unsent Thoughts" defaultOpen><Unsent canDelete={canDelete} /></Section>
+      <Section title="Goals"><Goals canDelete={canDelete} /></Section>
       <Section title="Mood"><Mood /></Section>
       <Section title="Worship"><Worship /></Section>
+      {profile && <p className="text-xs text-muted-foreground">Private entries marked with <Lock className="inline size-3" /> are encrypted before they leave your device.</p>}
     </div>
   );
 }
@@ -42,19 +47,43 @@ function Section({ title, children, defaultOpen = false }: { title: string; chil
   );
 }
 
-function Journal() {
+function Journal({ canDelete }: { canDelete: boolean }) {
   const { user } = useSession();
   const [entries, setEntries] = useState<any[]>([]);
   const [title, setTitle] = useState(""); const [body, setBody] = useState("");
+  const [passphrase, setPassphrase] = useState(() => (typeof window !== "undefined" ? window.localStorage.getItem("shared-silance:enc-key") ?? "" : ""));
   const load = async () => {
     if (!user) return;
     const { data } = await supabase.from("journal_entries").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
-    setEntries(data ?? []);
+    const mapped = await Promise.all((data ?? []).map(async (item: any) => {
+      if (item.body_encrypted && passphrase) {
+        try {
+          const plain = await decryptText(item.body_encrypted, passphrase, item.body_iv, item.body_salt, item.body_kdf_iter ?? undefined);
+          return { ...item, body: plain };
+        } catch {
+          return { ...item, body: "[Encrypted. Enter correct passphrase in settings/session.]" };
+        }
+      }
+      return item;
+    }));
+    setEntries(mapped);
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [user?.id]);
   const add = async () => {
     if (!user || !title.trim() || !body.trim()) return;
-    const { error } = await supabase.from("journal_entries").insert({ user_id: user.id, title: title.trim(), body: body.trim() });
+    if (!passphrase) return toast.error("Set your encryption passphrase first.");
+    window.localStorage.setItem("shared-silance:enc-key", passphrase);
+    const encrypted = await encryptText(body.trim(), passphrase);
+    const { error } = await supabase.from("journal_entries").insert({
+      user_id: user.id,
+      title: title.trim(),
+      body: "",
+      body_encrypted: encrypted.ciphertext,
+      body_iv: encrypted.iv,
+      body_salt: encrypted.salt,
+      body_kdf_iter: encrypted.iterations,
+      body_key_version: encrypted.keyVersion,
+    });
     if (error) return toast.error(error.message);
     setTitle(""); setBody(""); toast.success("Entry saved"); load();
   };
@@ -65,16 +94,17 @@ function Journal() {
     <div className="space-y-4">
       <div className="space-y-3">
         <h3 className="font-display tracking-widest">NEW ENTRY</h3>
+        <Input placeholder="Encryption passphrase" type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
         <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
         <Textarea placeholder="Write…" value={body} onChange={(e) => setBody(e.target.value)} rows={6} />
-        <Button onClick={add}><Plus className="size-4" /> Save entry</Button>
+        <Button onClick={add}><Lock className="size-4" /> Save encrypted entry</Button>
       </div>
       <div className="space-y-3">
         {entries.map((e) => (
           <div key={e.id} className="rounded-xl border border-border/70 bg-card p-4">
             <div className="flex justify-between items-baseline">
               <h4 className="font-display tracking-wide">{e.title}</h4>
-              <button onClick={() => del(e.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="size-4" /></button>
+              {canDelete && <button onClick={() => del(e.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="size-4" /></button>}
             </div>
             <p className="text-xs text-muted-foreground">{new Date(e.created_at).toLocaleString()}</p>
             <p className="mt-3 whitespace-pre-wrap leading-relaxed">{e.body}</p>
@@ -87,16 +117,21 @@ function Journal() {
 }
 
 function Mood() {
-  const { user } = useSession();
+  const { user, partnerProfile } = useSession();
   const [list, setList] = useState<any[]>([]);
+  const [partnerList, setPartnerList] = useState<any[]>([]);
   const today = new Date().toISOString().slice(0, 10);
   const todays = list.find((m) => m.entry_date === today);
   const load = async () => {
     if (!user) return;
     const { data } = await supabase.from("mood_entries").select("*").eq("user_id", user.id).order("entry_date", { ascending: false });
     setList(data ?? []);
+    if (partnerProfile?.id) {
+      const { data: pData } = await supabase.from("mood_entries").select("*").eq("user_id", partnerProfile.id).order("entry_date", { ascending: false }).limit(30);
+      setPartnerList(pData ?? []);
+    }
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [user?.id]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [user?.id, partnerProfile?.id]);
   const set = async (mood: string) => {
     if (!user) return;
     const { error } = await supabase.from("mood_entries").upsert({ user_id: user.id, entry_date: today, mood }, { onConflict: "user_id,entry_date" });
@@ -124,11 +159,26 @@ function Mood() {
           ))}
         </div>
       </div>
+      {list.length >= 5 && partnerList.length >= 5 && (
+        <div className="rounded-xl border border-border/70 p-3">
+          <h4 className="font-display text-xs uppercase tracking-widest text-primary mb-2">how you've both been feeling</h4>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-muted-foreground mb-1">You</p>
+              <div className="flex flex-wrap gap-1">{list.slice(0, 30).map((m) => <span key={m.id}>{m.mood}</span>)}</div>
+            </div>
+            <div>
+              <p className="text-muted-foreground mb-1">Partner</p>
+              <div className="flex flex-wrap gap-1">{partnerList.slice(0, 30).map((m) => <span key={m.id}>{m.mood}</span>)}</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function Goals() {
+function Goals({ canDelete }: { canDelete: boolean }) {
   const { user } = useSession();
   const [list, setList] = useState<any[]>([]);
   const [title, setTitle] = useState("");
@@ -159,7 +209,7 @@ function Goals() {
           <li key={g.id} className="rounded-xl border border-border/70 bg-card p-4 flex items-center gap-3">
             <Checkbox checked={g.done} onCheckedChange={() => toggle(g)} />
             <span className={["flex-1", g.done && "line-through text-muted-foreground"].filter(Boolean).join(" ")}>{g.title}</span>
-            <button onClick={() => del(g.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="size-4" /></button>
+            {canDelete && <button onClick={() => del(g.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="size-4" /></button>}
           </li>
         ))}
       </ul>
@@ -223,11 +273,12 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
-function Unsent() {
+function Unsent({ canDelete }: { canDelete: boolean }) {
   const { user } = useSession();
   const [list, setList] = useState<any[]>([]);
   const [text, setText] = useState("");
   const [recording, setRecording] = useState(false);
+  const [passphrase, setPassphrase] = useState(() => (typeof window !== "undefined" ? window.localStorage.getItem("shared-silance:enc-key") ?? "" : ""));
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -241,7 +292,19 @@ function Unsent() {
 
   const addText = async () => {
     if (!user || !text.trim()) return;
-    await supabase.from("unsent_thoughts").insert({ user_id: user.id, kind: "text", text_content: text.trim() });
+    if (!passphrase) return toast.error("Set your encryption passphrase first.");
+    window.localStorage.setItem("shared-silance:enc-key", passphrase);
+    const encrypted = await encryptText(text.trim(), passphrase);
+    await supabase.from("unsent_thoughts").insert({
+      user_id: user.id,
+      kind: "text",
+      text_content: null,
+      text_encrypted: encrypted.ciphertext,
+      text_iv: encrypted.iv,
+      text_salt: encrypted.salt,
+      text_kdf_iter: encrypted.iterations,
+      text_key_version: encrypted.keyVersion,
+    });
     setText(""); toast.success("Saved"); load();
   };
 
@@ -288,6 +351,7 @@ function Unsent() {
     <div className="space-y-4">
       <div className="space-y-3">
         <h3 className="font-display tracking-widest">THINGS I WISH I COULD TELL YOU</h3>
+        <Input placeholder="Encryption passphrase" type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
         <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="Write it…" />
         <div className="flex flex-wrap gap-2">
           <Button onClick={addText}><Plus className="size-4" /> Save text</Button>
@@ -305,10 +369,10 @@ function Unsent() {
           <li key={r.id} className="rounded-xl border border-border/70 bg-card p-4">
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{new Date(r.created_at).toLocaleString()}</span>
-              <button onClick={() => del(r)} className="hover:text-destructive"><Trash2 className="size-3.5" /></button>
+              {canDelete && <button onClick={() => del(r)} className="hover:text-destructive"><Trash2 className="size-3.5" /></button>}
             </div>
             {r.kind === "text" ? (
-              <p className="mt-2 whitespace-pre-wrap leading-relaxed">{r.text_content}</p>
+              <p className="mt-2 whitespace-pre-wrap leading-relaxed">{r.text_content ?? "[Encrypted text]"}</p>
             ) : (
               <AudioRow path={r.audio_path} />
             )}

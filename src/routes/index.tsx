@@ -47,7 +47,12 @@ function LandingPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const { email } = await partnerEmailForUsername({ data: { username: liUsername } });
+      const { email, isClaimed } = await partnerEmailForUsername({ data: { username: liUsername } });
+      if (!isClaimed) {
+        nav({ to: "/set-password", search: { username: liUsername.trim().toLowerCase() } as any });
+        toast.info("Set your password to claim your account.");
+        return;
+      }
       const { error } = await supabase.auth.signInWithPassword({ email, password: liPwd });
       if (error) throw error;
       nav({ to: "/today" });

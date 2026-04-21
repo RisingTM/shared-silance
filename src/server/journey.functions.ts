@@ -8,9 +8,9 @@ import { z } from "zod";
 const setupSchema = z.object({
   ownerDisplayName: z.string().trim().min(1).max(60),
   partnerUsername: z.string().trim().min(2).max(40).regex(/^[a-zA-Z0-9_.-]+$/, "Letters, numbers, . _ - only"),
-  partnerPassword: z.string().min(8).max(120),
   partnerDisplayName: z.string().trim().min(1).max(60),
   ncStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  talkingSince: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
 export const setupJourney = createServerFn({ method: "POST" })
@@ -38,7 +38,7 @@ export const setupJourney = createServerFn({ method: "POST" })
     // Create journey
     const { data: journey, error: jErr } = await supabaseAdmin
       .from("journeys")
-      .insert({ nc_start_date: data.ncStartDate })
+      .insert({ nc_start_date: data.ncStartDate, talking_since: data.talkingSince })
       .select()
       .single();
     if (jErr || !journey) throw new Error(jErr?.message ?? "Failed to create journey");
@@ -63,15 +63,16 @@ export const setupJourney = createServerFn({ method: "POST" })
       display_name: data.ownerDisplayName,
       role: "owner",
       must_set_password: false,
+      is_claimed: true,
     });
     if (opErr) throw new Error(opErr.message);
 
-    // Create partner auth user with synthetic email + provided password
+    // Create partner auth user with temporary random password.
+    // Partner will claim their account by setting their own password later.
     const partnerEmail = `${data.partnerUsername.toLowerCase()}@internal.app`;
-    const partnerPassword = data.partnerPassword;
     const { data: partnerCreated, error: pErr } = await supabaseAdmin.auth.admin.createUser({
       email: partnerEmail,
-      password: partnerPassword,
+      password: `${crypto.randomUUID()}Aa1!`,
       email_confirm: true,
       user_metadata: { username: data.partnerUsername.toLowerCase(), partner: true },
     });
@@ -83,7 +84,8 @@ export const setupJourney = createServerFn({ method: "POST" })
       username: data.partnerUsername.toLowerCase(),
       display_name: data.partnerDisplayName,
       role: "partner",
-      must_set_password: false,
+      must_set_password: true,
+      is_claimed: false,
     });
     if (ppErr) throw new Error(ppErr.message);
 
@@ -100,13 +102,49 @@ export const partnerEmailForUsername = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { data: profile, error } = await supabaseAdmin
       .from("profiles")
-      .select("id")
+      .select("id, must_set_password, is_claimed")
       .eq("username", data.username.toLowerCase())
       .maybeSingle();
     if (error || !profile) throw new Error("Username not found");
     const { data: u } = await supabaseAdmin.auth.admin.getUserById(profile.id);
     if (!u.user?.email) throw new Error("Account not configured");
-    return { email: u.user.email };
+    return {
+      email: u.user.email,
+      mustSetPassword: !!profile.must_set_password,
+      isClaimed: profile.is_claimed ?? true,
+    };
+  });
+
+const claimSchema = z.object({
+  username: z.string().trim().min(2).max(40),
+  newPassword: z.string().min(8).max(120),
+});
+
+export const claimPartnerPassword = createServerFn({ method: "POST" })
+  .inputValidator((d: z.infer<typeof claimSchema>) => claimSchema.parse(d))
+  .handler(async ({ data }) => {
+    const username = data.username.toLowerCase();
+    const { data: profile, error } = await supabaseAdmin
+      .from("profiles")
+      .select("id, is_claimed")
+      .eq("username", username)
+      .eq("role", "partner")
+      .maybeSingle();
+    if (error || !profile) throw new Error("Partner account not found");
+    if (profile.is_claimed) throw new Error("This account is already claimed. Please sign in.");
+
+    const { error: pwdErr } = await supabaseAdmin.auth.admin.updateUserById(profile.id, {
+      password: data.newPassword,
+    });
+    if (pwdErr) throw new Error(pwdErr.message);
+
+    const { error: profileErr } = await supabaseAdmin
+      .from("profiles")
+      .update({ must_set_password: false, is_claimed: true })
+      .eq("id", profile.id);
+    if (profileErr) throw new Error(profileErr.message);
+
+    return { ok: true };
   });
 
 // ----- Update your own password -----
@@ -128,41 +166,30 @@ export const setOwnPassword = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ----- Owner: regenerate partner password -----
-export const regeneratePartnerTempPassword = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const ownerId = context.userId;
-    const { data: ownerProfile } = await supabaseAdmin
-      .from("profiles")
-      .select("journey_id, role")
-      .eq("id", ownerId)
-      .single();
-    if (!ownerProfile || ownerProfile.role !== "owner") throw new Error("Only the owner can do this");
-
-    const { data: partner } = await supabaseAdmin
-      .from("profiles")
-      .select("id, username")
-      .eq("journey_id", ownerProfile.journey_id)
-      .eq("role", "partner")
-      .single();
-    if (!partner) throw new Error("Partner not found");
-
-    const tempPassword = crypto.randomUUID() + "Aa1!";
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(partner.id, {
-      password: tempPassword,
-    });
-    if (error) throw new Error(error.message);
-    await supabaseAdmin.from("profiles").update({ must_set_password: false }).eq("id", partner.id);
-
-    return { username: partner.username, tempPassword };
-  });
-
 // ----- Reset NC counter (either user can do this) -----
 const resetSchema = z.object({
   brokenBy: z.enum(["him", "her"]),
   note: z.string().trim().max(500).optional(),
 });
+
+const allowPrivateDeletesSchema = z.object({
+  allow: z.boolean(),
+});
+
+export const setAllowPrivateDeletes = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: z.infer<typeof allowPrivateDeletesSchema>) => allowPrivateDeletesSchema.parse(d))
+  .handler(async ({ context, data }) => {
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("journey_id, role")
+      .eq("id", context.userId)
+      .maybeSingle();
+    if (!profile || profile.role !== "owner") throw new Error("Only the owner can update this setting.");
+    const { error } = await supabaseAdmin.from("journeys").update({ allow_private_deletes: data.allow }).eq("id", profile.journey_id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
 
 export const resetCounter = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

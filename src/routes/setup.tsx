@@ -23,9 +23,9 @@ function SetupPage() {
 
   const [ownerName, setOwnerName] = useState("");
   const [partnerUsername, setPartnerUsername] = useState("");
-  const [partnerPassword, setPartnerPassword] = useState("");
   const [partnerName, setPartnerName] = useState("");
   const [ncDate, setNcDate] = useState(new Date().toISOString().slice(0, 10));
+  const [talkingSince, setTalkingSince] = useState(new Date().toISOString().slice(0, 10));
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
@@ -36,9 +36,9 @@ function SetupPage() {
         data: {
           ownerDisplayName: ownerName,
           partnerUsername: partnerUsername,
-          partnerPassword,
           partnerDisplayName: partnerName,
           ncStartDate: ncDate,
+          talkingSince,
         },
       });
       toast.success("Journey created");
@@ -61,7 +61,7 @@ function SetupPage() {
       <div className="parchment-card rounded-2xl p-8 max-w-lg w-full">
         <h1 className="font-display text-2xl tracking-widest text-center text-primary">SET UP THE JOURNEY</h1>
         <p className="text-center text-sm text-muted-foreground italic mt-2">
-          You're creating both accounts now: username and password for each of you.
+          Choose your partner's username. They will set their own password when they join.
         </p>
 
         <form onSubmit={submit} className="mt-8 space-y-4">
@@ -74,16 +74,16 @@ function SetupPage() {
             <Input required value={partnerUsername} onChange={(e) => setPartnerUsername(e.target.value)} placeholder="letters, numbers, . _ -" />
           </div>
           <div>
-            <Label className="font-display text-xs uppercase tracking-widest">Her password</Label>
-            <Input type="password" required minLength={8} value={partnerPassword} onChange={(e) => setPartnerPassword(e.target.value)} />
-          </div>
-          <div>
             <Label className="font-display text-xs uppercase tracking-widest">Her name</Label>
             <Input required value={partnerName} onChange={(e) => setPartnerName(e.target.value)} />
           </div>
           <div>
             <Label className="font-display text-xs uppercase tracking-widest">No-contact start date</Label>
             <Input type="date" required value={ncDate} onChange={(e) => setNcDate(e.target.value)} />
+          </div>
+          <div>
+            <Label className="font-display text-xs uppercase tracking-widest">When did you two start talking?</Label>
+            <Input type="date" required value={talkingSince} onChange={(e) => setTalkingSince(e.target.value)} />
           </div>
           <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? "Creating…" : "Create our journey"}

@@ -94,6 +94,11 @@ export type Database = {
       journal_entries: {
         Row: {
           body: string
+          body_encrypted: string | null
+          body_iv: string | null
+          body_kdf_iter: number | null
+          body_key_version: string | null
+          body_salt: string | null
           created_at: string
           id: string
           title: string
@@ -101,6 +106,11 @@ export type Database = {
         }
         Insert: {
           body: string
+          body_encrypted?: string | null
+          body_iv?: string | null
+          body_kdf_iter?: number | null
+          body_key_version?: string | null
+          body_salt?: string | null
           created_at?: string
           id?: string
           title: string
@@ -108,6 +118,11 @@ export type Database = {
         }
         Update: {
           body?: string
+          body_encrypted?: string | null
+          body_iv?: string | null
+          body_kdf_iter?: number | null
+          body_key_version?: string | null
+          body_salt?: string | null
           created_at?: string
           id?: string
           title?: string
@@ -117,22 +132,28 @@ export type Database = {
       }
       journeys: {
         Row: {
+          allow_private_deletes: boolean
           created_at: string
           has_been_reset: boolean
           id: string
           nc_start_date: string
+          talking_since: string | null
         }
         Insert: {
+          allow_private_deletes?: boolean
           created_at?: string
           has_been_reset?: boolean
           id?: string
           nc_start_date?: string
+          talking_since?: string | null
         }
         Update: {
+          allow_private_deletes?: boolean
           created_at?: string
           has_been_reset?: boolean
           id?: string
           nc_start_date?: string
+          talking_since?: string | null
         }
         Relationships: []
       }
@@ -221,29 +242,47 @@ export type Database = {
       }
       profiles: {
         Row: {
+          bio: string | null
+          counter_label: string | null
           created_at: string
           display_name: string | null
           id: string
+          is_claimed: boolean
           journey_id: string
           must_set_password: boolean
+          push_enabled: boolean
+          reminder_enabled: boolean
+          reminder_time: string
           role: Database["public"]["Enums"]["user_role"]
           username: string
         }
         Insert: {
+          bio?: string | null
+          counter_label?: string | null
           created_at?: string
           display_name?: string | null
           id: string
+          is_claimed?: boolean
           journey_id: string
           must_set_password?: boolean
+          push_enabled?: boolean
+          reminder_enabled?: boolean
+          reminder_time?: string
           role: Database["public"]["Enums"]["user_role"]
           username: string
         }
         Update: {
+          bio?: string | null
+          counter_label?: string | null
           created_at?: string
           display_name?: string | null
           id?: string
+          is_claimed?: boolean
           journey_id?: string
           must_set_password?: boolean
+          push_enabled?: boolean
+          reminder_enabled?: boolean
+          reminder_time?: string
           role?: Database["public"]["Enums"]["user_role"]
           username?: string
         }
@@ -256,6 +295,123 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      push_subscriptions: {
+        Row: {
+          active: boolean
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      checkin_miss_log: {
+        Row: {
+          id: string
+          missed_at: string
+          user_id: string
+          window_end: string
+          window_start: string
+        }
+        Insert: {
+          id?: string
+          missed_at?: string
+          user_id: string
+          window_end: string
+          window_start: string
+        }
+        Update: {
+          id?: string
+          missed_at?: string
+          user_id?: string
+          window_end?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
+      personal_duas: {
+        Row: {
+          arabic: string
+          created_at: string
+          english: string
+          id: string
+          title: string
+          transliteration: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          arabic: string
+          created_at?: string
+          english: string
+          id?: string
+          title?: string
+          transliteration?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          arabic?: string
+          created_at?: string
+          english?: string
+          id?: string
+          title?: string
+          transliteration?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      thinking_pings: {
+        Row: {
+          created_at: string
+          id: string
+          journey_id: string
+          recipient_id: string
+          sender_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          journey_id: string
+          recipient_id: string
+          sender_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          journey_id?: string
+          recipient_id?: string
+          sender_id?: string
+        }
+        Relationships: []
       }
       sealed_letters: {
         Row: {
@@ -380,6 +536,11 @@ export type Database = {
           created_at: string
           id: string
           kind: string
+          text_encrypted: string | null
+          text_iv: string | null
+          text_kdf_iter: number | null
+          text_key_version: string | null
+          text_salt: string | null
           text_content: string | null
           user_id: string
         }
@@ -388,6 +549,11 @@ export type Database = {
           created_at?: string
           id?: string
           kind: string
+          text_encrypted?: string | null
+          text_iv?: string | null
+          text_kdf_iter?: number | null
+          text_key_version?: string | null
+          text_salt?: string | null
           text_content?: string | null
           user_id: string
         }
@@ -396,6 +562,11 @@ export type Database = {
           created_at?: string
           id?: string
           kind?: string
+          text_encrypted?: string | null
+          text_iv?: string | null
+          text_kdf_iter?: number | null
+          text_key_version?: string | null
+          text_salt?: string | null
           text_content?: string | null
           user_id?: string
         }

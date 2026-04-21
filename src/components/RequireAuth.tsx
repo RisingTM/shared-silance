@@ -14,6 +14,10 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     }
     if (user && !profile) {
       nav({ to: "/setup" });
+      return;
+    }
+    if (profile?.must_set_password) {
+      nav({ to: "/set-password", search: { username: profile.username } as any });
     }
   }, [loading, user, profile, nav]);
 

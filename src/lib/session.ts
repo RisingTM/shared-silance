@@ -9,12 +9,20 @@ export type Profile = {
   display_name: string | null;
   role: "owner" | "partner";
   must_set_password: boolean;
+  is_claimed?: boolean;
+  bio?: string | null;
+  counter_label?: string | null;
+  reminder_time?: string;
+  reminder_enabled?: boolean;
+  push_enabled?: boolean;
 };
 
 export type Journey = {
   id: string;
   nc_start_date: string;
   has_been_reset: boolean;
+  talking_since?: string | null;
+  allow_private_deletes?: boolean;
 };
 
 export type Session = {
