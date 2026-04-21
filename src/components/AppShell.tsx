@@ -1,8 +1,9 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
 import { useSession, signOut } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { LogOut, Heart, Calendar, Sparkles, BookOpen, Unlock } from "lucide-react";
+import { OnboardingTour } from "./OnboardingTour";
 
 const TABS = [
   { to: "/today", label: "Today", icon: Heart },
@@ -13,8 +14,24 @@ const TABS = [
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { profile } = useSession();
+  const { user, profile } = useSession();
   const loc = useLocation();
+  const [tourOpen, setTourOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    const key = `our-journey:tour-seen:${user.id}`;
+    if (typeof window !== "undefined" && !window.localStorage.getItem(key)) {
+      setTourOpen(true);
+    }
+  }, [user]);
+
+  const closeTour = () => {
+    if (user && typeof window !== "undefined") {
+      window.localStorage.setItem(`our-journey:tour-seen:${user.id}`, "1");
+    }
+    setTourOpen(false);
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -71,8 +88,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           <p className="mt-2 text-sm italic text-muted-foreground">
             "Perhaps you dislike a thing and it is good for you." — Al-Baqarah 2:216
           </p>
+          <button
+            onClick={() => setTourOpen(true)}
+            className="mt-4 text-xs italic text-muted-foreground hover:text-primary underline-offset-4 hover:underline"
+          >
+            Take the tour again
+          </button>
         </div>
       </footer>
+
+      <OnboardingTour open={tourOpen} onClose={closeTour} />
     </div>
   );
 }

@@ -69,6 +69,20 @@ function LandingPage() {
     }
   };
 
+  // Forgot password (owner only)
+  const [showReset, setShowReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const handleSendReset = async () => {
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: window.location.origin + "/reset-password",
+    });
+    setLoading(false);
+    if (error) return toast.error(error.message);
+    toast.success("Recovery email sent. Check your inbox.");
+    setShowReset(false);
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <div className="mx-auto max-w-2xl w-full px-4 py-12 flex-1">
@@ -101,6 +115,35 @@ function LandingPage() {
                   <Input type="password" required value={liPwd} onChange={(e) => setLiPwd(e.target.value)} />
                 </div>
                 <Button type="submit" disabled={loading} className="w-full">Sign in</Button>
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowReset((v) => !v)}
+                    className="text-xs italic text-muted-foreground hover:text-primary underline-offset-4 hover:underline"
+                  >
+                    Forgot password? (email accounts only)
+                  </button>
+                </div>
+                {showReset && (
+                  <div className="rounded-md border border-border/60 bg-secondary/30 p-3 space-y-2">
+                    <Label className="font-display text-xs uppercase tracking-widest">Email for recovery</Label>
+                    <Input
+                      type="email"
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      placeholder="you@example.com"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={loading || !resetEmail}
+                      onClick={handleSendReset}
+                      className="w-full"
+                    >
+                      Send recovery link
+                    </Button>
+                  </div>
+                )}
               </form>
             </TabsContent>
 
