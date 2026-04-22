@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Mic, Square, Trash2, Upload, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { MOOD_EMOJIS, daysBetween } from "@/lib/statuses";
-import { decryptText, encryptText } from "@/lib/crypto";
+import { decryptAuto, encryptAuto } from "@/lib/crypto";
 import { getUserEncKey } from "@/lib/enc-key";
 import { Lock } from "lucide-react";
 
@@ -59,7 +59,7 @@ function Journal({ canDelete }: { canDelete: boolean }) {
     const mapped = await Promise.all((data ?? []).map(async (item: any) => {
       if (item.encrypted_body && item.iv && key) {
         try {
-          const plain = await decryptText(item.encrypted_body, key, item.iv, item.iv);
+          const plain = await decryptAuto(item.encrypted_body, key, item.iv);
           return { ...item, body: plain };
         } catch {
           return { ...item, body: "[Could not decrypt this entry on this device.]" };
@@ -73,7 +73,7 @@ function Journal({ canDelete }: { canDelete: boolean }) {
   const add = async () => {
     if (!user || !title.trim() || !body.trim()) return;
     const key = getUserEncKey(user.id);
-    const encrypted = await encryptText(body.trim(), key);
+    const encrypted = await encryptAuto(body.trim(), key);
     const { error } = await supabase.from("journal_entries").insert({
       user_id: user.id,
       title: title.trim(),
