@@ -228,6 +228,103 @@ export function AppShell({ children }: { children: ReactNode }) {
                       <Switch id="allow-private-deletes" checked={allowPrivateDeletes} onCheckedChange={setAllowPrivateDeletes} />
                     </div>
                   )}
+
+                  <div className="rounded-xl border border-border/70 p-4 space-y-4">
+                    <p className="font-display text-xs uppercase tracking-widest text-muted-foreground">Birthdays</p>
+                    <div className="space-y-2">
+                      <Label className="text-xs uppercase tracking-widest">Your birthday</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !birthday && "text-muted-foreground")}>
+                            <CalendarIcon className="size-4" />
+                            {birthday ? format(new Date(`${birthday}T00:00:00`), "PPP") : <span>Pick a date</span>}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={birthday ? new Date(`${birthday}T00:00:00`) : undefined}
+                            onSelect={(d) => setBirthday(d ? format(d, "yyyy-MM-dd") : null)}
+                            initialFocus
+                            className={cn("p-3 pointer-events-auto")}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <p className="text-xs italic text-muted-foreground">{formatBirthdayCountdown(daysUntilNextBirthday(birthday), true)}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs uppercase tracking-widest">@{partnerProfile?.username ?? "partner"}'s birthday</Label>
+                      <div className="rounded-md border border-border/70 bg-muted/40 p-3 text-sm">
+                        {partnerBirthday ? format(new Date(`${partnerBirthday}T00:00:00`), "PPP") : <span className="text-muted-foreground">not set yet</span>}
+                      </div>
+                      <p className="text-xs italic text-muted-foreground">{formatBirthdayCountdown(daysUntilNextBirthday(partnerBirthday), false)}</p>
+                    </div>
+                  </div>
+
+                  {profile?.role === "owner" && journey && (
+                    <div className="rounded-xl border border-border/70 p-4 space-y-4">
+                      <p className="font-display text-xs uppercase tracking-widest text-muted-foreground">Important Dates</p>
+                      <div className="space-y-2">
+                        <Label className="text-xs uppercase tracking-widest">No contact since</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start text-left font-normal">
+                              <CalendarIcon className="size-4" />
+                              {ncStartDate ? format(new Date(`${ncStartDate}T00:00:00`), "PPP") : <span>Pick a date</span>}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={ncStartDate ? new Date(`${ncStartDate}T00:00:00`) : undefined}
+                              onSelect={(d) => d && setNcStartDate(format(d, "yyyy-MM-dd"))}
+                              initialFocus
+                              className={cn("p-3 pointer-events-auto")}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <p className="text-xs italic text-muted-foreground">currently {ncStartDate ? daysBetween(ncStartDate) : 0} days</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs uppercase tracking-widest">Started talking</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !talkingSince && "text-muted-foreground")}>
+                              <CalendarIcon className="size-4" />
+                              {talkingSince ? format(new Date(`${talkingSince}T00:00:00`), "PPP") : <span>Pick a date</span>}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={talkingSince ? new Date(`${talkingSince}T00:00:00`) : undefined}
+                              onSelect={(d) => setTalkingSince(d ? format(d, "yyyy-MM-dd") : null)}
+                              initialFocus
+                              className={cn("p-3 pointer-events-auto")}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <p className="text-xs italic text-muted-foreground">{talkingSince ? `currently ${daysBetween(talkingSince)} days` : "not set"}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground italic">Changing these dates will update the counters for both of you.</p>
+                      <AlertDialog open={confirmDatesOpen} onOpenChange={setConfirmDatesOpen}>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" className="w-full">Save important dates</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>This will update the counter for both you and your partner.</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={saveImportantDates}>Confirm</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  )}
+
                   <p className="text-xs text-muted-foreground">If you forget your password, your journal entries cannot be recovered.</p>
                   <div className="space-y-2">
                     <Button className="w-full" onClick={saveSettings}>Save settings</Button>
