@@ -13,6 +13,7 @@ import { Mic, Square, Trash2, Upload, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { MOOD_EMOJIS, daysBetween } from "@/lib/statuses";
 import { decryptText, encryptText } from "@/lib/crypto";
+import { getUserEncKey } from "@/lib/enc-key";
 import { Lock } from "lucide-react";
 
 export const Route = createFileRoute("/private")({
@@ -51,17 +52,17 @@ function Journal({ canDelete }: { canDelete: boolean }) {
   const { user } = useSession();
   const [entries, setEntries] = useState<any[]>([]);
   const [title, setTitle] = useState(""); const [body, setBody] = useState("");
-  const [passphrase, setPassphrase] = useState(() => (typeof window !== "undefined" ? window.localStorage.getItem("shared-silance:enc-key") ?? "" : ""));
   const load = async () => {
     if (!user) return;
+    const key = getUserEncKey(user.id);
     const { data } = await supabase.from("journal_entries").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
     const mapped = await Promise.all((data ?? []).map(async (item: any) => {
-      if (item.body_encrypted && passphrase) {
+      if (item.encrypted_body && item.iv && key) {
         try {
-          const plain = await decryptText(item.body_encrypted, passphrase, item.body_iv, item.body_salt, item.body_kdf_iter ?? undefined);
+          const plain = await decryptText(item.encrypted_body, key, item.iv, item.iv);
           return { ...item, body: plain };
         } catch {
-          return { ...item, body: "[Encrypted. Enter correct passphrase in settings/session.]" };
+          return { ...item, body: "[Could not decrypt this entry on this device.]" };
         }
       }
       return item;
@@ -71,9 +72,8 @@ function Journal({ canDelete }: { canDelete: boolean }) {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [user?.id]);
   const add = async () => {
     if (!user || !title.trim() || !body.trim()) return;
-    if (!passphrase) return toast.error("Set your encryption passphrase first.");
-    window.localStorage.setItem("shared-silance:enc-key", passphrase);
-    const encrypted = await encryptText(body.trim(), passphrase);
+    const key = getUserEncKey(user.id);
+    const encrypted = await encryptText(body.trim(), key);
     const { error } = await supabase.from("journal_entries").insert({
       user_id: user.id,
       title: title.trim(),
@@ -91,7 +91,6 @@ function Journal({ canDelete }: { canDelete: boolean }) {
     <div className="space-y-4">
       <div className="space-y-3">
         <h3 className="font-display tracking-widest">NEW ENTRY</h3>
-        <Input placeholder="Encryption passphrase" type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
         <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
         <Textarea placeholder="Write…" value={body} onChange={(e) => setBody(e.target.value)} rows={6} />
         <Button onClick={add}><Lock className="size-4" /> Save encrypted entry</Button>
