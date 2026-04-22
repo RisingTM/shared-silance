@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { History, Heart } from "lucide-react";
 import { insertWithOfflineQueue } from "@/lib/data-client";
 import { notify, requestNotificationPermission } from "@/lib/notifications";
+import { PartnerActivity } from "@/components/PartnerActivity";
 
 export const Route = createFileRoute("/today")({
   component: () => (<RequireAuth><AppShell><TodayPage /></AppShell></RequireAuth>),
