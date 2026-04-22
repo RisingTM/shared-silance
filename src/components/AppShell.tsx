@@ -105,6 +105,22 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     toast.success("Settings saved");
     setSettingsOpen(false);
+    refresh().catch(() => undefined);
+  };
+
+  const saveImportantDates = async () => {
+    if (!journey || profile?.role !== "owner") return;
+    const { error } = await supabase
+      .from("journeys")
+      .update({
+        nc_start_date: ncStartDate || journey.nc_start_date,
+        talking_since: talkingSince,
+      })
+      .eq("id", journey.id);
+    if (error) return toast.error(error.message);
+    toast.success("Dates updated");
+    setConfirmDatesOpen(false);
+    await refresh();
   };
 
   const closeTour = () => {
