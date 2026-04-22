@@ -53,3 +53,25 @@ export async function decryptText(
   return dec.decode(plain);
 }
 
+// ---- Auto-key variants: salt is fixed and embedded, so we only need to
+// persist the iv alongside the ciphertext. Used by the auto encryption flow
+// where the user never sees a passphrase.
+const FIXED_SALT = enc.encode("shared-silance:fixed-salt:v1");
+
+export async function encryptAuto(plainText: string, password: string) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveAesKey(password, FIXED_SALT);
+  const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(plainText));
+  return { ciphertext: toB64(new Uint8Array(cipher)), iv: toB64(iv) };
+}
+
+export async function decryptAuto(ciphertext: string, password: string, ivB64: string) {
+  const key = await deriveAesKey(password, FIXED_SALT);
+  const plain = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: fromB64(ivB64) as BufferSource },
+    key,
+    fromB64(ciphertext) as BufferSource,
+  );
+  return dec.decode(plain);
+}
+
