@@ -74,7 +74,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     setReminderEnabled(profile.reminder_enabled ?? true);
     setReminderTime((profile.reminder_time ?? "21:00:00").slice(0, 5));
     setAllowPrivateDeletes(!!journey?.allow_private_deletes);
+    setBirthday((profile as any).birthday ?? null);
   }, [profile, journey?.allow_private_deletes]);
+
+  useEffect(() => {
+    if (!journey) return;
+    setNcStartDate(journey.nc_start_date ?? null);
+    setTalkingSince(journey.talking_since ?? null);
+  }, [journey?.id, journey?.nc_start_date, journey?.talking_since]);
 
   const saveSettings = async () => {
     if (!profile) return;
@@ -85,7 +92,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         counter_label: counterLabel.trim() || "Days of no contact",
         reminder_time: `${reminderTime}:00`,
         reminder_enabled: reminderEnabled,
-      })
+        birthday: birthday,
+      } as any)
       .eq("id", profile.id);
     if (pErr) return toast.error(pErr.message);
     if (profile.role === "owner" && journey) {
