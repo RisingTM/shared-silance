@@ -199,6 +199,8 @@ function TodayPage() {
         <p className="text-muted-foreground italic mt-1">Your journey at a glance.</p>
       </div>
 
+      <PartnerActivity partnerId={partnerProfile?.id} partnerUsername={partnerProfile?.username} />
+
       {showDigest && (
         <div className="parchment-card rounded-2xl p-4">
           <div className="flex items-start justify-between gap-3">
