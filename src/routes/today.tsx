@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { History, Heart } from "lucide-react";
 import { insertWithOfflineQueue } from "@/lib/data-client";
 import { notify, requestNotificationPermission } from "@/lib/notifications";
+import { PartnerActivity } from "@/components/PartnerActivity";
 
 export const Route = createFileRoute("/today")({
   component: () => (<RequireAuth><AppShell><TodayPage /></AppShell></RequireAuth>),
@@ -198,6 +199,8 @@ function TodayPage() {
         <h2 className="font-display text-3xl tracking-widest text-primary">TODAY</h2>
         <p className="text-muted-foreground italic mt-1">Your journey at a glance.</p>
       </div>
+
+      <PartnerActivity partnerId={partnerProfile?.id} partnerUsername={partnerProfile?.username} />
 
       {showDigest && (
         <div className="parchment-card rounded-2xl p-4">

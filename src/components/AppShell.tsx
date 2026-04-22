@@ -2,18 +2,25 @@ import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
 import { useSession, signOut } from "@/lib/session";
 import { Button } from "@/components/ui/button";
-import { Heart, Sparkles, BookOpen, Unlock, Moon, Sun, Settings, LogOut } from "lucide-react";
+import { Heart, Sparkles, BookOpen, Unlock, Moon, Sun, Settings, LogOut, CalendarIcon } from "lucide-react";
 import { OnboardingTour } from "./OnboardingTour";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "./ui/sheet";
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Switch } from "./ui/switch";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Calendar } from "./ui/calendar";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { notify, registerPushSubscription, requestNotificationPermission } from "@/lib/notifications";
 import { flushOfflineQueue } from "@/lib/data-client";
 import { setAllowPrivateDeletes } from "@/server/journey.functions";
+import { daysUntilNextBirthday, formatBirthdayCountdown } from "@/lib/birthday";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
+import { daysBetween } from "@/lib/statuses";
 
 const TABS = [
   { to: "/today", label: "Today", icon: Heart },
@@ -23,7 +30,7 @@ const TABS = [
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user, profile, partnerProfile, journey } = useSession();
+  const { user, profile, partnerProfile, journey, refresh } = useSession();
   const loc = useLocation();
   const [tourOpen, setTourOpen] = useState(false);
   const [dark, setDark] = useState(false);
@@ -33,6 +40,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [reminderTime, setReminderTime] = useState("21:00");
   const [reminderEnabled, setReminderEnabled] = useState(true);
   const [allowPrivateDeletes, setAllowPrivateDeletes] = useState(false);
+  const [birthday, setBirthday] = useState<string | null>(null);
+  const [ncStartDate, setNcStartDate] = useState<string | null>(null);
+  const [talkingSince, setTalkingSince] = useState<string | null>(null);
+  const [confirmDatesOpen, setConfirmDatesOpen] = useState(false);
+
+  const partnerBirthday = (partnerProfile as any)?.birthday ?? null;
 
   useEffect(() => {
     if (!user) return;
@@ -61,7 +74,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     setReminderEnabled(profile.reminder_enabled ?? true);
     setReminderTime((profile.reminder_time ?? "21:00:00").slice(0, 5));
     setAllowPrivateDeletes(!!journey?.allow_private_deletes);
+    setBirthday((profile as any).birthday ?? null);
   }, [profile, journey?.allow_private_deletes]);
+
+  useEffect(() => {
+    if (!journey) return;
+    setNcStartDate(journey.nc_start_date ?? null);
+    setTalkingSince(journey.talking_since ?? null);
+  }, [journey?.id, journey?.nc_start_date, journey?.talking_since]);
 
   const saveSettings = async () => {
     if (!profile) return;
@@ -72,7 +92,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         counter_label: counterLabel.trim() || "Days of no contact",
         reminder_time: `${reminderTime}:00`,
         reminder_enabled: reminderEnabled,
-      })
+        birthday: birthday,
+      } as any)
       .eq("id", profile.id);
     if (pErr) return toast.error(pErr.message);
     if (profile.role === "owner" && journey) {
@@ -84,6 +105,22 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     toast.success("Settings saved");
     setSettingsOpen(false);
+    refresh().catch(() => undefined);
+  };
+
+  const saveImportantDates = async () => {
+    if (!journey || profile?.role !== "owner") return;
+    const { error } = await supabase
+      .from("journeys")
+      .update({
+        nc_start_date: ncStartDate || journey.nc_start_date,
+        talking_since: talkingSince,
+      })
+      .eq("id", journey.id);
+    if (error) return toast.error(error.message);
+    toast.success("Dates updated");
+    setConfirmDatesOpen(false);
+    await refresh();
   };
 
   const closeTour = () => {
@@ -191,6 +228,103 @@ export function AppShell({ children }: { children: ReactNode }) {
                       <Switch id="allow-private-deletes" checked={allowPrivateDeletes} onCheckedChange={setAllowPrivateDeletes} />
                     </div>
                   )}
+
+                  <div className="rounded-xl border border-border/70 p-4 space-y-4">
+                    <p className="font-display text-xs uppercase tracking-widest text-muted-foreground">Birthdays</p>
+                    <div className="space-y-2">
+                      <Label className="text-xs uppercase tracking-widest">Your birthday</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !birthday && "text-muted-foreground")}>
+                            <CalendarIcon className="size-4" />
+                            {birthday ? format(new Date(`${birthday}T00:00:00`), "PPP") : <span>Pick a date</span>}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={birthday ? new Date(`${birthday}T00:00:00`) : undefined}
+                            onSelect={(d) => setBirthday(d ? format(d, "yyyy-MM-dd") : null)}
+                            initialFocus
+                            className={cn("p-3 pointer-events-auto")}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <p className="text-xs italic text-muted-foreground">{formatBirthdayCountdown(daysUntilNextBirthday(birthday), true)}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs uppercase tracking-widest">@{partnerProfile?.username ?? "partner"}'s birthday</Label>
+                      <div className="rounded-md border border-border/70 bg-muted/40 p-3 text-sm">
+                        {partnerBirthday ? format(new Date(`${partnerBirthday}T00:00:00`), "PPP") : <span className="text-muted-foreground">not set yet</span>}
+                      </div>
+                      <p className="text-xs italic text-muted-foreground">{formatBirthdayCountdown(daysUntilNextBirthday(partnerBirthday), false)}</p>
+                    </div>
+                  </div>
+
+                  {profile?.role === "owner" && journey && (
+                    <div className="rounded-xl border border-border/70 p-4 space-y-4">
+                      <p className="font-display text-xs uppercase tracking-widest text-muted-foreground">Important Dates</p>
+                      <div className="space-y-2">
+                        <Label className="text-xs uppercase tracking-widest">No contact since</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start text-left font-normal">
+                              <CalendarIcon className="size-4" />
+                              {ncStartDate ? format(new Date(`${ncStartDate}T00:00:00`), "PPP") : <span>Pick a date</span>}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={ncStartDate ? new Date(`${ncStartDate}T00:00:00`) : undefined}
+                              onSelect={(d) => d && setNcStartDate(format(d, "yyyy-MM-dd"))}
+                              initialFocus
+                              className={cn("p-3 pointer-events-auto")}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <p className="text-xs italic text-muted-foreground">currently {ncStartDate ? daysBetween(ncStartDate) : 0} days</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs uppercase tracking-widest">Started talking</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !talkingSince && "text-muted-foreground")}>
+                              <CalendarIcon className="size-4" />
+                              {talkingSince ? format(new Date(`${talkingSince}T00:00:00`), "PPP") : <span>Pick a date</span>}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={talkingSince ? new Date(`${talkingSince}T00:00:00`) : undefined}
+                              onSelect={(d) => setTalkingSince(d ? format(d, "yyyy-MM-dd") : null)}
+                              initialFocus
+                              className={cn("p-3 pointer-events-auto")}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <p className="text-xs italic text-muted-foreground">{talkingSince ? `currently ${daysBetween(talkingSince)} days` : "not set"}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground italic">Changing these dates will update the counters for both of you.</p>
+                      <AlertDialog open={confirmDatesOpen} onOpenChange={setConfirmDatesOpen}>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" className="w-full">Save important dates</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>This will update the counter for both you and your partner.</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={saveImportantDates}>Confirm</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  )}
+
                   <p className="text-xs text-muted-foreground">If you forget your password, your journal entries cannot be recovered.</p>
                   <div className="space-y-2">
                     <Button className="w-full" onClick={saveSettings}>Save settings</Button>
