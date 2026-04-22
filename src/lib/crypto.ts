@@ -48,7 +48,7 @@ export async function decryptText(
   const plain = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: fromB64(ivB64) as BufferSource },
     key,
-    fromB64(ciphertext),
+    fromB64(ciphertext) as BufferSource,
   );
   return dec.decode(plain);
 }
