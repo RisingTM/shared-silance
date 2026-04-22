@@ -78,11 +78,8 @@ function Journal({ canDelete }: { canDelete: boolean }) {
       user_id: user.id,
       title: title.trim(),
       body: "",
-      body_encrypted: encrypted.ciphertext,
-      body_iv: encrypted.iv,
-      body_salt: encrypted.salt,
-      body_kdf_iter: encrypted.iterations,
-      body_key_version: encrypted.keyVersion,
+      encrypted_body: encrypted.ciphertext,
+      iv: encrypted.iv,
     });
     if (error) return toast.error(error.message);
     setTitle(""); setBody(""); toast.success("Entry saved"); load();
@@ -299,11 +296,8 @@ function Unsent({ canDelete }: { canDelete: boolean }) {
       user_id: user.id,
       kind: "text",
       text_content: null,
-      text_encrypted: encrypted.ciphertext,
-      text_iv: encrypted.iv,
-      text_salt: encrypted.salt,
-      text_kdf_iter: encrypted.iterations,
-      text_key_version: encrypted.keyVersion,
+      encrypted_body: encrypted.ciphertext,
+      iv: encrypted.iv,
     });
     setText(""); toast.success("Saved"); load();
   };
