@@ -30,7 +30,7 @@ const TABS = [
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user, profile, partnerProfile, journey } = useSession();
+  const { user, profile, partnerProfile, journey, refresh } = useSession();
   const loc = useLocation();
   const [tourOpen, setTourOpen] = useState(false);
   const [dark, setDark] = useState(false);
@@ -40,6 +40,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [reminderTime, setReminderTime] = useState("21:00");
   const [reminderEnabled, setReminderEnabled] = useState(true);
   const [allowPrivateDeletes, setAllowPrivateDeletes] = useState(false);
+  const [birthday, setBirthday] = useState<string | null>(null);
+  const [ncStartDate, setNcStartDate] = useState<string | null>(null);
+  const [talkingSince, setTalkingSince] = useState<string | null>(null);
+  const [confirmDatesOpen, setConfirmDatesOpen] = useState(false);
+
+  const partnerBirthday = (partnerProfile as any)?.birthday ?? null;
 
   useEffect(() => {
     if (!user) return;
