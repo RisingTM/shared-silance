@@ -1,59 +1,60 @@
 
 
-# Fix "Create journey does nothing" + add PWA install + password reset + onboarding tour
+# Birthdays, Important Dates & Partner Activity Indicator
 
-## Part 1 — Fix the broken setup flow (root cause)
+## Database changes
 
-**Root cause:** `setupJourney`, `setOwnPassword`, and `resetCounter` are server functions guarded by a middleware that requires an `Authorization: Bearer <access_token>` header. The browser never attaches that header, so every call fails with 401 silently — that's why clicking **Create our journey** appears to do nothing.
+Single migration:
+- `profiles.birthday` — `date`, nullable.
 
-A second possible cause: if email confirmation is on, the owner has no session at all after signup, so `/setup` can't authenticate.
+RLS: `profiles` already has `read own profile and partner` (any row in the same `journey_id`), so partner birthday reads work with no policy change. `journeys` already has `members update journey`, so the owner's date edits go through existing RLS — owner-only is enforced in the UI.
 
-**Fixes:**
+## Settings panel — Birthdays section
 
-1. **Inject the Supabase access token into every server-function request.** Add a tiny client bootstrap that wraps `globalThis.fetch` and, for same-origin requests to `/_serverFn/*`, attaches `Authorization: Bearer <access_token>` from the current Supabase session. Imported once from `src/router.tsx` (or a new `src/lib/server-fn-auth.ts`).
-2. **Disable email confirmation** in auth config so owner signup immediately yields a session and lands on `/setup` ready to act. (Per the project's auth setup, the owner is the only email user; partner uses synthesized credentials.)
-3. **Surface errors visibly** in `setup.tsx`: log the raw error to the console and show the message in the toast (already wired via `toast.error(err.message)`, but currently the request is rejected before reaching the handler with a plain `Response` — improve the error parsing so the toast shows "Unauthorized" instead of nothing).
-4. **Verify**: after the fix, clicking **Create our journey** completes and shows the temp-password screen.
+Added inside the existing `Sheet` in `src/components/AppShell.tsx`, styled like the other bordered cards.
 
-## Part 2 — Make it an installable PWA (no service worker)
+- **Your birthday** — Shadcn `DatePicker` (Popover + Calendar with `pointer-events-auto`), pre-filled from `profile.birthday`. Year stored but only month/day used for countdown.
+- **@{partnerProfile.username}'s birthday** — read-only display of the date (or "not set yet" placeholder).
+- Under each: countdown computed by `daysUntilNextBirthday(date)`:
+  - `0` → `🎂 it's their birthday today 🤍` (and `🎂 it's your birthday today 🤍` for self)
+  - `>0` → `🎂 N days away` / `🎂 1 day away`
+  - `null` → `not set yet` muted text
+- Saved alongside other profile fields in the existing `saveSettings` handler (`UPDATE profiles ... birthday = ...`).
 
-The user wants a PWA they can put on their phones. Per Lovable guidance, full PWAs with service workers are problematic in the editor preview. Since the app does not need offline support, we'll do the **simpler installable-PWA approach**: a web app manifest + icons + meta tags. No `vite-plugin-pwa`, no service worker — just "Add to Home Screen" support on iOS and Android with a standalone (chromeless) launch.
+## Settings panel — Important Dates (owner only)
 
-**Adds:**
-- `public/manifest.webmanifest` — name "Our Journey", short_name "Journey", `display: "standalone"`, parchment theme color `#f5ecd9`, background `#faf3e3`, start_url `/`.
-- `public/icon-192.png`, `public/icon-512.png`, `public/icon-maskable-512.png` — generated parchment-and-gold crescent icons.
-- `public/apple-touch-icon.png` (180×180) for iOS home screen.
-- Update `src/routes/__root.tsx` head: link the manifest, add `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`, `apple-mobile-web-app-title`, theme-color meta tags, and the apple-touch-icon link.
+New bordered card rendered only when `profile.role === "owner"`:
 
-**Result:** open the published URL on phone → browser menu → "Add to Home Screen" → opens fullscreen, no browser chrome, with the parchment splash colors.
+- **No contact since** — `DatePicker` pre-filled from `journey.nc_start_date`. Subtext: `currently {N} days`.
+- **Started talking** — `DatePicker` pre-filled from `journey.talking_since`. Subtext: `currently {N} days` (or `not set` if null).
+- Warning: *"Changing these dates will update the counters for both of you."*
+- A single **Save important dates** button opens an `AlertDialog`: *"Are you sure? This will update the counter for both you and your partner."* On confirm: `UPDATE journeys SET nc_start_date=?, talking_since=? WHERE id=?` — RLS allows because owner is a member.
+- Toast on success; sheet stays open.
 
-## Part 3 — Owner password reset
+## Partner activity indicator (home screen)
 
-- **Sign-in tab** (`src/routes/index.tsx`): add a small "Forgot password?" link. Reveals an inline email field; submits via `supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/reset-password' })`. Toast confirms.
-- **New public route `src/routes/reset-password.tsx`** (no `RequireAuth`): listens for the recovery `onAuthStateChange` event, shows a parchment card with two password fields, submits via `supabase.auth.updateUser({ password })`, then navigates to `/today`. If no recovery session is detected after a short wait, shows "This link is invalid or expired."
-- Copy on the sign-in tab clarifies "for email accounts only" — partners use a different login.
+Added near the top of `src/routes/today.tsx`, above the existing today/status block.
 
-## Part 4 — First-login onboarding tour
+- Pill-style badge: subtle border, parchment background, small dot icon.
+- Two states using the partner's actual username:
+  - Checked in today → soft amber/primary glow + check icon: `@{username} checked in today ✓`
+  - Not yet → muted, quiet: `waiting for @{username}…`
+- **Data source**: query `daily_statuses` filtered by `user_id = partnerProfile.id` and `created_at >= start of today (local)`, `select('id')` only — never selects `status`, so no content leaks. RLS already allows reading journey statuses.
+- **Reactivity**: `setInterval` polling every 60s + refetch on `focus` and `online`. Cleared on unmount.
+- Visible to both users (not gated by role).
 
-- **New `src/components/OnboardingTour.tsx`** — a 5-step parchment modal (reuses `parchment-card`), one step per tab (Today, Counter, Private, Dua, Unlock). Each step: Cinzel title, 3–4 sentences in Cormorant Garamond, Back / Next / Begin buttons, dot indicator.
-- **Trigger**: shown automatically once per user, persisted in `localStorage` under `our-journey:tour-seen:{user.id}`.
-- **Mount**: inside `AppShell` so it covers all authenticated pages. A small "Take the tour again" link in the footer reopens it.
-- No DB changes.
+## Reactive home-screen counters
 
-## Part 5 — Publish
+The counters on `/today` already derive from `journey.nc_start_date` / `talking_since` via `useSession`. After the owner saves new dates, the `useSession` journey query is invalidated (or the local journey object is refreshed) so the home screen reflects the change without a reload — done by re-fetching the session journey row after the UPDATE succeeds.
 
-The app is already published at `shared-silance.lovable.app`. After this round of changes, we'll just push an update so the fixes and PWA manifest go live — no new publishing flow needed. Open that URL on your phone, then "Add to Home Screen."
+## Files
 
-## Files changed/created
+- **New migration** — `ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS birthday date;`
+- **New** `src/lib/birthday.ts` — `daysUntilNextBirthday(date)` and `formatBirthdayCountdown(days, isSelf)` helpers.
+- **New** `src/components/PartnerActivity.tsx` — pill component with polling.
+- **Edit** `src/components/AppShell.tsx` — Birthdays section, Important Dates section (owner-gated), birthday state + save, AlertDialog confirm, journey refresh on save.
+- **Edit** `src/routes/today.tsx` — render `<PartnerActivity />` near the top.
+- **Edit** `src/integrations/supabase/types.ts` — add `birthday` field to `profiles` row types (auto-regenerated, but ensure usage compiles).
 
-- **Create** `src/lib/server-fn-auth.ts` — fetch wrapper that injects Supabase Bearer token on `/_serverFn/*` calls.
-- **Edit** `src/router.tsx` — import the wrapper once on startup.
-- **Edit** `src/routes/setup.tsx` — better error surfacing.
-- **Auth config** — disable email confirmation for owner signup.
-- **Create** `public/manifest.webmanifest`, `public/icon-192.png`, `public/icon-512.png`, `public/icon-maskable-512.png`, `public/apple-touch-icon.png`.
-- **Edit** `src/routes/__root.tsx` — manifest link + Apple PWA meta tags + theme color.
-- **Edit** `src/routes/index.tsx` — "Forgot password?" inline form on sign-in tab.
-- **Create** `src/routes/reset-password.tsx` — recovery page.
-- **Create** `src/components/OnboardingTour.tsx` — 5-step tour.
-- **Edit** `src/components/AppShell.tsx` — mount the tour + "Take the tour again" footer link.
+No changes to existing RLS policies. No new server functions — owner date edits use the standard supabase client under existing journey RLS.
 
