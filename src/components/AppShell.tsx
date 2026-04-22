@@ -2,18 +2,25 @@ import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
 import { useSession, signOut } from "@/lib/session";
 import { Button } from "@/components/ui/button";
-import { Heart, Sparkles, BookOpen, Unlock, Moon, Sun, Settings, LogOut } from "lucide-react";
+import { Heart, Sparkles, BookOpen, Unlock, Moon, Sun, Settings, LogOut, CalendarIcon } from "lucide-react";
 import { OnboardingTour } from "./OnboardingTour";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "./ui/sheet";
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Switch } from "./ui/switch";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Calendar } from "./ui/calendar";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { notify, registerPushSubscription, requestNotificationPermission } from "@/lib/notifications";
 import { flushOfflineQueue } from "@/lib/data-client";
 import { setAllowPrivateDeletes } from "@/server/journey.functions";
+import { daysUntilNextBirthday, formatBirthdayCountdown } from "@/lib/birthday";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
+import { daysBetween } from "@/lib/statuses";
 
 const TABS = [
   { to: "/today", label: "Today", icon: Heart },
