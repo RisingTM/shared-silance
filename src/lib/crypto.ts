@@ -15,7 +15,7 @@ function fromB64(value: string): Uint8Array {
 export async function deriveAesKey(password: string, salt: Uint8Array, iterations = ITERATIONS) {
   const base = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
+    { name: "PBKDF2", salt: salt as BufferSource, iterations, hash: "SHA-256" },
     base,
     { name: "AES-GCM", length: 256 },
     false,
@@ -46,9 +46,9 @@ export async function decryptText(
 ) {
   const key = await deriveAesKey(password, fromB64(saltB64), iterations);
   const plain = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: fromB64(ivB64) },
+    { name: "AES-GCM", iv: fromB64(ivB64) as BufferSource },
     key,
-    fromB64(ciphertext),
+    fromB64(ciphertext) as BufferSource,
   );
   return dec.decode(plain);
 }

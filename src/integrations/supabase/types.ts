@@ -32,6 +32,35 @@ export type Database = {
         }
         Relationships: []
       }
+      checkin_miss_log: {
+        Row: {
+          created_at: string
+          id: string
+          missed_date: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          missed_date: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          missed_date?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkin_miss_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_statuses: {
         Row: {
           created_at: string
@@ -94,37 +123,28 @@ export type Database = {
       journal_entries: {
         Row: {
           body: string
-          body_encrypted: string | null
-          body_iv: string | null
-          body_kdf_iter: number | null
-          body_key_version: string | null
-          body_salt: string | null
           created_at: string
+          encrypted_body: string | null
           id: string
+          iv: string | null
           title: string
           user_id: string
         }
         Insert: {
           body: string
-          body_encrypted?: string | null
-          body_iv?: string | null
-          body_kdf_iter?: number | null
-          body_key_version?: string | null
-          body_salt?: string | null
           created_at?: string
+          encrypted_body?: string | null
           id?: string
+          iv?: string | null
           title: string
           user_id: string
         }
         Update: {
           body?: string
-          body_encrypted?: string | null
-          body_iv?: string | null
-          body_kdf_iter?: number | null
-          body_key_version?: string | null
-          body_salt?: string | null
           created_at?: string
+          encrypted_body?: string | null
           id?: string
+          iv?: string | null
           title?: string
           user_id?: string
         }
@@ -240,17 +260,46 @@ export type Database = {
           },
         ]
       }
+      personal_duas: {
+        Row: {
+          created_at: string
+          id: string
+          text: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          text: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          text?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "personal_duas_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           bio: string | null
-          counter_label: string | null
+          counter_label: string
           created_at: string
           display_name: string | null
           id: string
           is_claimed: boolean
           journey_id: string
           must_set_password: boolean
-          push_enabled: boolean
+          push_endpoint: string | null
           reminder_enabled: boolean
           reminder_time: string
           role: Database["public"]["Enums"]["user_role"]
@@ -258,14 +307,14 @@ export type Database = {
         }
         Insert: {
           bio?: string | null
-          counter_label?: string | null
+          counter_label?: string
           created_at?: string
           display_name?: string | null
           id: string
           is_claimed?: boolean
           journey_id: string
           must_set_password?: boolean
-          push_enabled?: boolean
+          push_endpoint?: string | null
           reminder_enabled?: boolean
           reminder_time?: string
           role: Database["public"]["Enums"]["user_role"]
@@ -273,14 +322,14 @@ export type Database = {
         }
         Update: {
           bio?: string | null
-          counter_label?: string | null
+          counter_label?: string
           created_at?: string
           display_name?: string | null
           id?: string
           is_claimed?: boolean
           journey_id?: string
           must_set_password?: boolean
-          push_enabled?: boolean
+          push_endpoint?: string | null
           reminder_enabled?: boolean
           reminder_time?: string
           role?: Database["public"]["Enums"]["user_role"]
@@ -298,120 +347,38 @@ export type Database = {
       }
       push_subscriptions: {
         Row: {
-          active: boolean
           auth: string
           created_at: string
           endpoint: string
           id: string
           p256dh: string
-          updated_at: string
-          user_agent: string | null
           user_id: string
         }
         Insert: {
-          active?: boolean
           auth: string
           created_at?: string
           endpoint: string
           id?: string
           p256dh: string
-          updated_at?: string
-          user_agent?: string | null
           user_id: string
         }
         Update: {
-          active?: boolean
           auth?: string
           created_at?: string
           endpoint?: string
           id?: string
           p256dh?: string
-          updated_at?: string
-          user_agent?: string | null
           user_id?: string
         }
-        Relationships: []
-      }
-      checkin_miss_log: {
-        Row: {
-          id: string
-          missed_at: string
-          user_id: string
-          window_end: string
-          window_start: string
-        }
-        Insert: {
-          id?: string
-          missed_at?: string
-          user_id: string
-          window_end: string
-          window_start: string
-        }
-        Update: {
-          id?: string
-          missed_at?: string
-          user_id?: string
-          window_end?: string
-          window_start?: string
-        }
-        Relationships: []
-      }
-      personal_duas: {
-        Row: {
-          arabic: string
-          created_at: string
-          english: string
-          id: string
-          title: string
-          transliteration: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          arabic: string
-          created_at?: string
-          english: string
-          id?: string
-          title?: string
-          transliteration?: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          arabic?: string
-          created_at?: string
-          english?: string
-          id?: string
-          title?: string
-          transliteration?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      thinking_pings: {
-        Row: {
-          created_at: string
-          id: string
-          journey_id: string
-          recipient_id: string
-          sender_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          journey_id: string
-          recipient_id: string
-          sender_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          journey_id?: string
-          recipient_id?: string
-          sender_id?: string
-        }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sealed_letters: {
         Row: {
@@ -451,6 +418,42 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      thinking_pings: {
+        Row: {
+          id: string
+          receiver_id: string
+          sender_id: string
+          sent_at: string
+        }
+        Insert: {
+          id?: string
+          receiver_id: string
+          sender_id: string
+          sent_at?: string
+        }
+        Update: {
+          id?: string
+          receiver_id?: string
+          sender_id?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "thinking_pings_receiver_id_fkey"
+            columns: ["receiver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "thinking_pings_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       trigger_logs: {
         Row: {
@@ -534,39 +537,30 @@ export type Database = {
         Row: {
           audio_path: string | null
           created_at: string
+          encrypted_body: string | null
           id: string
+          iv: string | null
           kind: string
-          text_encrypted: string | null
-          text_iv: string | null
-          text_kdf_iter: number | null
-          text_key_version: string | null
-          text_salt: string | null
           text_content: string | null
           user_id: string
         }
         Insert: {
           audio_path?: string | null
           created_at?: string
+          encrypted_body?: string | null
           id?: string
+          iv?: string | null
           kind: string
-          text_encrypted?: string | null
-          text_iv?: string | null
-          text_kdf_iter?: number | null
-          text_key_version?: string | null
-          text_salt?: string | null
           text_content?: string | null
           user_id: string
         }
         Update: {
           audio_path?: string | null
           created_at?: string
+          encrypted_body?: string | null
           id?: string
+          iv?: string | null
           kind?: string
-          text_encrypted?: string | null
-          text_iv?: string | null
-          text_kdf_iter?: number | null
-          text_key_version?: string | null
-          text_salt?: string | null
           text_content?: string | null
           user_id?: string
         }

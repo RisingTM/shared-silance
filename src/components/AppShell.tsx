@@ -69,7 +69,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       .from("profiles")
       .update({
         bio: bio.trim() || null,
-        counter_label: counterLabel.trim() || null,
+        counter_label: counterLabel.trim() || "Days of no contact",
         reminder_time: `${reminderTime}:00`,
         reminder_enabled: reminderEnabled,
       })
@@ -77,7 +77,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (pErr) return toast.error(pErr.message);
     if (profile.role === "owner" && journey) {
       try {
-        await setAllowPrivateDeletes({ data: { allow: allowPrivateDeletes } });
+        await (setAllowPrivateDeletes as any)({ data: { allow: allowPrivateDeletes } });
       } catch (err: any) {
         return toast.error(err?.message ?? "Could not update owner setting");
       }

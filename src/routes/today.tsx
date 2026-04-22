@@ -94,9 +94,9 @@ function TodayPage() {
       if (!profile) return;
       const { data } = await supabase
         .from("thinking_pings")
-        .select("id, created_at")
-        .eq("recipient_id", profile.id)
-        .order("created_at", { ascending: false })
+        .select("id, sent_at")
+        .eq("receiver_id", profile.id)
+        .order("sent_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       if (!data) return;
@@ -153,9 +153,8 @@ function TodayPage() {
   const sendThinkingPing = async () => {
     if (!profile || !partnerProfile || !journey || !canPing) return;
     const { error } = await supabase.from("thinking_pings").insert({
-      journey_id: journey.id,
       sender_id: profile.id,
-      recipient_id: partnerProfile.id,
+      receiver_id: partnerProfile.id,
     });
     if (error) return toast.error(error.message);
     window.localStorage.setItem(`shared-silance:last-ping:${profile.id}`, String(Date.now()));
@@ -168,11 +167,9 @@ function TodayPage() {
       if (!profile || !mine || !missedWindow) return;
       const key = `shared-silance:miss-log:${profile.id}:${new Date().toISOString().slice(0, 10)}`;
       if (window.localStorage.getItem(key)) return;
-      const start = new Date(new Date(mine.created_at).getTime() + 24 * 3600 * 1000);
       await supabase.from("checkin_miss_log").insert({
         user_id: profile.id,
-        window_start: mine.created_at,
-        window_end: start.toISOString(),
+        missed_date: new Date().toISOString().slice(0, 10),
       });
       window.localStorage.setItem(key, "1");
     };

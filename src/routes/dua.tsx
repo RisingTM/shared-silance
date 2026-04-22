@@ -40,10 +40,7 @@ function DuaPage() {
     if (!user || !arabic.trim() || !english.trim()) return;
     await supabase.from("personal_duas").insert({
       user_id: user.id,
-      title: title.trim(),
-      arabic: arabic.trim(),
-      english: english.trim(),
-      transliteration: "",
+      text: [title.trim(), arabic.trim(), english.trim()].filter(Boolean).join("\n\n"),
     });
     setTitle("");
     setArabic("");

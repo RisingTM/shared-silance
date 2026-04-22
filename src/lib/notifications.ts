@@ -23,13 +23,11 @@ export async function registerPushSubscription(userId: string) {
   const sub = await reg.pushManager.getSubscription();
   if (!sub) return;
   const json = sub.toJSON();
-  await supabase.from("push_subscriptions").upsert({
+  await supabase.from("push_subscriptions").insert({
     user_id: userId,
-    endpoint: json.endpoint,
+    endpoint: json.endpoint ?? "",
     p256dh: json.keys?.p256dh ?? "",
     auth: json.keys?.auth ?? "",
-    user_agent: navigator.userAgent,
-    active: true,
   });
 }
 
