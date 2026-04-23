@@ -191,6 +191,26 @@ export const setAllowPrivateDeletes = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// ----- Notify partner of a new today-update (best-effort web push) -----
+const notifySchema = z.object({
+  partnerId: z.string().uuid(),
+  message: z.string().trim().min(1).max(200),
+});
+
+export const notifyPartnerUpdate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: z.infer<typeof notifySchema>) => notifySchema.parse(d))
+  .handler(async ({ data }) => {
+    // We don't have web-push configured (no VAPID keys), so this is a no-op
+    // server-side stub. Subscriptions are still recorded so this can be
+    // wired to a sender later. Return ok so the client doesn't error.
+    const { data: subs } = await supabaseAdmin
+      .from("push_subscriptions")
+      .select("id")
+      .eq("user_id", data.partnerId);
+    return { ok: true, subscribers: subs?.length ?? 0 };
+  });
+
 export const resetCounter = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: z.infer<typeof resetSchema>) => resetSchema.parse(d))

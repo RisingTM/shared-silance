@@ -93,6 +93,150 @@ export type Database = {
           },
         ]
       }
+      deen_athkar: {
+        Row: {
+          days: boolean[]
+          id: string
+          kind: string
+          updated_at: string
+          user_id: string
+          week_start: string
+        }
+        Insert: {
+          days?: boolean[]
+          id?: string
+          kind: string
+          updated_at?: string
+          user_id: string
+          week_start: string
+        }
+        Update: {
+          days?: boolean[]
+          id?: string
+          kind?: string
+          updated_at?: string
+          user_id?: string
+          week_start?: string
+        }
+        Relationships: []
+      }
+      deen_dhikr: {
+        Row: {
+          count: number
+          id: string
+          kind: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          count?: number
+          id?: string
+          kind: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          count?: number
+          id?: string
+          kind?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      deen_fasting: {
+        Row: {
+          days: boolean[]
+          id: string
+          updated_at: string
+          user_id: string
+          week_start: string
+        }
+        Insert: {
+          days?: boolean[]
+          id?: string
+          updated_at?: string
+          user_id: string
+          week_start: string
+        }
+        Update: {
+          days?: boolean[]
+          id?: string
+          updated_at?: string
+          user_id?: string
+          week_start?: string
+        }
+        Relationships: []
+      }
+      deen_prayers: {
+        Row: {
+          days: boolean[]
+          id: string
+          prayer: string
+          updated_at: string
+          user_id: string
+          week_start: string
+        }
+        Insert: {
+          days?: boolean[]
+          id?: string
+          prayer: string
+          updated_at?: string
+          user_id: string
+          week_start: string
+        }
+        Update: {
+          days?: boolean[]
+          id?: string
+          prayer?: string
+          updated_at?: string
+          user_id?: string
+          week_start?: string
+        }
+        Relationships: []
+      }
+      deen_quran: {
+        Row: {
+          current_page: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          current_page?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          current_page?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      deen_quran_log: {
+        Row: {
+          created_at: string
+          id: string
+          log_date: string
+          pages: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          log_date?: string
+          pages?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          log_date?: string
+          pages?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       goals: {
         Row: {
           created_at: string
@@ -542,6 +686,7 @@ export type Database = {
           created_at: string
           encrypted_body: string | null
           id: string
+          image_path: string | null
           iv: string | null
           kind: string
           text_content: string | null
@@ -552,6 +697,7 @@ export type Database = {
           created_at?: string
           encrypted_body?: string | null
           id?: string
+          image_path?: string | null
           iv?: string | null
           kind: string
           text_content?: string | null
@@ -562,6 +708,7 @@ export type Database = {
           created_at?: string
           encrypted_body?: string | null
           id?: string
+          image_path?: string | null
           iv?: string | null
           kind?: string
           text_content?: string | null
@@ -652,7 +799,23 @@ export type Database = {
     }
     Enums: {
       broken_by: "him" | "her"
-      status_kind: "okay" | "praying" | "miss" | "strong" | "hard" | "proud"
+      status_kind:
+        | "okay"
+        | "praying"
+        | "miss"
+        | "strong"
+        | "hard"
+        | "proud"
+        | "peace"
+        | "gentle"
+        | "healing"
+        | "trying"
+        | "heavy"
+        | "here"
+        | "trusting"
+        | "felt_strong"
+        | "quiet"
+        | "proud_you"
       user_role: "owner" | "partner"
     }
     CompositeTypes: {
@@ -782,7 +945,24 @@ export const Constants = {
   public: {
     Enums: {
       broken_by: ["him", "her"],
-      status_kind: ["okay", "praying", "miss", "strong", "hard", "proud"],
+      status_kind: [
+        "okay",
+        "praying",
+        "miss",
+        "strong",
+        "hard",
+        "proud",
+        "peace",
+        "gentle",
+        "healing",
+        "trying",
+        "heavy",
+        "here",
+        "trusting",
+        "felt_strong",
+        "quiet",
+        "proud_you",
+      ],
       user_role: ["owner", "partner"],
     },
   },

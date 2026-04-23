@@ -15,7 +15,7 @@ import { Route as SetupRouteImport } from './routes/setup'
 import { Route as SetPasswordRouteImport } from './routes/set-password'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PrivateRouteImport } from './routes/private'
-import { Route as DuaRouteImport } from './routes/dua'
+import { Route as DeenRouteImport } from './routes/deen'
 import { Route as CounterRouteImport } from './routes/counter'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -49,9 +49,9 @@ const PrivateRoute = PrivateRouteImport.update({
   path: '/private',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DuaRoute = DuaRouteImport.update({
-  id: '/dua',
-  path: '/dua',
+const DeenRoute = DeenRouteImport.update({
+  id: '/deen',
+  path: '/deen',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CounterRoute = CounterRouteImport.update({
@@ -68,7 +68,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/counter': typeof CounterRoute
-  '/dua': typeof DuaRoute
+  '/deen': typeof DeenRoute
   '/private': typeof PrivateRoute
   '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
@@ -79,7 +79,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/counter': typeof CounterRoute
-  '/dua': typeof DuaRoute
+  '/deen': typeof DeenRoute
   '/private': typeof PrivateRoute
   '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
@@ -91,7 +91,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/counter': typeof CounterRoute
-  '/dua': typeof DuaRoute
+  '/deen': typeof DeenRoute
   '/private': typeof PrivateRoute
   '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
@@ -104,7 +104,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/counter'
-    | '/dua'
+    | '/deen'
     | '/private'
     | '/reset-password'
     | '/set-password'
@@ -115,7 +115,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/counter'
-    | '/dua'
+    | '/deen'
     | '/private'
     | '/reset-password'
     | '/set-password'
@@ -126,7 +126,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/counter'
-    | '/dua'
+    | '/deen'
     | '/private'
     | '/reset-password'
     | '/set-password'
@@ -138,7 +138,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CounterRoute: typeof CounterRoute
-  DuaRoute: typeof DuaRoute
+  DeenRoute: typeof DeenRoute
   PrivateRoute: typeof PrivateRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SetPasswordRoute: typeof SetPasswordRoute
@@ -191,11 +191,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivateRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dua': {
-      id: '/dua'
-      path: '/dua'
-      fullPath: '/dua'
-      preLoaderRoute: typeof DuaRouteImport
+    '/deen': {
+      id: '/deen'
+      path: '/deen'
+      fullPath: '/deen'
+      preLoaderRoute: typeof DeenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/counter': {
@@ -218,7 +218,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CounterRoute: CounterRoute,
-  DuaRoute: DuaRoute,
+  DeenRoute: DeenRoute,
   PrivateRoute: PrivateRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SetPasswordRoute: SetPasswordRoute,
