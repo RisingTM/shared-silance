@@ -4,35 +4,38 @@ import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useSession } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
-import { daysBetween } from "@/lib/statuses";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Lock, Unlock as UnlockIcon } from "lucide-react";
+import { Lock, Unlock as UnlockIcon, BookOpen, MessageSquareOff, Target } from "lucide-react";
 import { toast } from "sonner";
+import { MediaOverlay } from "@/components/MediaOverlay";
 
 export const Route = createFileRoute("/unlock")({
-  component: () => (<RequireAuth><AppShell><UnlockPage /></AppShell></RequireAuth>),
+  component: () => (
+    <RequireAuth>
+      <AppShell>
+        <UnlockPage />
+      </AppShell>
+    </RequireAuth>
+  ),
 });
 
 const SECTIONS = [
-  { k: "share_journal", l: "Journal" },
-  { k: "share_mood", l: "Mood history" },
-  { k: "share_goals", l: "Goals" },
-  { k: "share_worship", l: "Worship log" },
-  { k: "share_unsent_text", l: "Unsent thoughts (text)" },
-  { k: "share_unsent_audio", l: "Unsent thoughts (audio)" },
+  { k: "share_journal", l: "Journal", Icon: BookOpen },
+  { k: "share_unsent_text", l: "Unsent thoughts (text)", Icon: MessageSquareOff },
+  { k: "share_unsent_audio", l: "Unsent thoughts (audio + photos)", Icon: MessageSquareOff },
+  { k: "share_goals", l: "Goals", Icon: Target },
 ] as const;
 
 type Prefs = Record<string, any>;
 
 function UnlockPage() {
-  const { user, profile, journey, partnerProfile } = useSession();
+  const { user, partnerProfile } = useSession();
   const [mine, setMine] = useState<Prefs>({});
   const [partner, setPartner] = useState<Prefs | null>(null);
   const [partnerData, setPartnerData] = useState<any>({});
-  const days = journey ? daysBetween(journey.nc_start_date) : 0;
-  const eligible = days >= 365;
+  const [overlay, setOverlay] = useState<{ kind: "audio" | "image"; bucket: "unsent-audio" | "unsent-images"; path: string } | null>(null);
 
   const load = async () => {
     if (!user || !partnerProfile) return;
@@ -41,27 +44,38 @@ function UnlockPage() {
     const { data: p } = await supabase.from("unlock_prefs").select("*").eq("user_id", partnerProfile.id).maybeSingle();
     setPartner((p as unknown as Prefs) ?? null);
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [user?.id, partnerProfile?.id]);
+  useEffect(() => {
+    load();
+    /* eslint-disable-next-line */
+  }, [user?.id, partnerProfile?.id]);
 
-  // Load whatever partner has shared (RLS will filter)
   useEffect(() => {
     if (!partnerProfile || !partner?.is_unlocked) return;
     const pid = partnerProfile.id;
     const fetches: Record<string, PromiseLike<any>> = {};
-    if (partner.share_journal) fetches.journal = supabase.from("journal_entries").select("*").eq("user_id", pid).order("created_at", { ascending: false });
-    if (partner.share_mood) fetches.mood = supabase.from("mood_entries").select("*").eq("user_id", pid).order("entry_date", { ascending: false });
-    if (partner.share_goals) fetches.goals = supabase.from("goals").select("*").eq("user_id", pid).order("created_at", { ascending: false });
-    if (partner.share_worship) fetches.worship = supabase.from("worship_logs").select("*").eq("user_id", pid).order("entry_date", { ascending: false });
-    if (partner.share_unsent_text || partner.share_unsent_audio) fetches.unsent = supabase.from("unsent_thoughts").select("*").eq("user_id", pid).order("created_at", { ascending: false });
+    if (partner.share_journal)
+      fetches.journal = supabase.from("journal_entries").select("*").eq("user_id", pid).order("created_at", { ascending: false });
+    if (partner.share_goals)
+      fetches.goals = supabase.from("goals").select("*").eq("user_id", pid).order("created_at", { ascending: false });
+    if (partner.share_unsent_text || partner.share_unsent_audio)
+      fetches.unsent = supabase.from("unsent_thoughts").select("*").eq("user_id", pid).order("created_at", { ascending: false });
 
-    Promise.all(Object.entries(fetches).map(async ([k, p]) => [k, (await Promise.resolve(p) as any).data] as const)).then((entries) => {
-      setPartnerData(Object.fromEntries(entries));
-    });
+    Promise.all(Object.entries(fetches).map(async ([k, p]) => [k, ((await Promise.resolve(p)) as any).data] as const)).then(
+      (entries) => {
+        setPartnerData(Object.fromEntries(entries));
+      },
+    );
   }, [partner, partnerProfile]);
 
   const save = async () => {
     if (!user) return;
-    const payload = { user_id: user.id, ...mine, is_unlocked: true, updated_at: new Date().toISOString() };
+    const allOff = SECTIONS.every((s) => !mine[s.k]);
+    const payload = {
+      user_id: user.id,
+      ...mine,
+      is_unlocked: !allOff,
+      updated_at: new Date().toISOString(),
+    };
     const { error } = await supabase.from("unlock_prefs").upsert(payload);
     if (error) return toast.error(error.message);
     toast.success("Saved. They'll see only what you chose.");
@@ -69,36 +83,37 @@ function UnlockPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="text-center">
         <h2 className="font-display text-3xl tracking-widest text-primary">UNLOCK</h2>
-        <p className="text-muted-foreground italic mt-1">After 365 days, choose — slowly — what to share.</p>
+        <p className="text-muted-foreground italic mt-1">Choose what you want them to see.</p>
       </div>
 
-      <div className="parchment-card rounded-2xl p-6">
-        <h3 className="font-display tracking-widest mb-4">YOUR SHARING</h3>
-        {!eligible ? (
-          <div className="flex items-center gap-3 text-muted-foreground">
-            <Lock className="size-5" />
-            <p>Unlocks after 365 days. Currently at <strong>{days}</strong>.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {SECTIONS.map((s) => (
-              <div key={s.k} className="flex items-center justify-between">
-                <Label htmlFor={s.k}>{s.l}</Label>
-                <Switch id={s.k} checked={!!mine[s.k]} onCheckedChange={(v) => setMine({ ...mine, [s.k]: v })} />
-              </div>
-            ))}
-            <Button onClick={save} className="w-full mt-4"><UnlockIcon className="size-4" /> Save choices</Button>
-          </div>
-        )}
+      <div className="parchment-card rounded-2xl p-5">
+        <h3 className="font-display text-sm uppercase tracking-widest mb-4">Your sharing</h3>
+        <div className="space-y-3">
+          {SECTIONS.map(({ k, l, Icon }) => (
+            <div key={k} className="flex items-center justify-between rounded-xl border border-border/70 p-3">
+              <Label htmlFor={k} className="flex items-center gap-3 cursor-pointer">
+                <Icon className="size-4 text-primary" />
+                <span>{l}</span>
+              </Label>
+              <Switch id={k} checked={!!mine[k]} onCheckedChange={(v) => setMine({ ...mine, [k]: v })} />
+            </div>
+          ))}
+          <Button onClick={save} className="w-full mt-2">
+            <UnlockIcon className="size-4" /> Save choices
+          </Button>
+        </div>
       </div>
 
-      <div className="parchment-card rounded-2xl p-6">
-        <h3 className="font-display tracking-widest mb-4">WHAT THEY CHOSE TO SHOW YOU</h3>
+      <div className="parchment-card rounded-2xl p-5">
+        <h3 className="font-display text-sm uppercase tracking-widest mb-4">What they chose to show you</h3>
         {!partner?.is_unlocked ? (
-          <p className="text-muted-foreground italic">Nothing yet.</p>
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <Lock className="size-4" />
+            <p className="italic">Nothing yet.</p>
+          </div>
         ) : (
           <div className="space-y-6">
             {partnerData.journal?.length > 0 && (
@@ -112,19 +127,15 @@ function UnlockPage() {
                 ))}
               </Section>
             )}
-            {partnerData.mood?.length > 0 && (
-              <Section title="Mood">
-                <div className="flex flex-wrap gap-2">{partnerData.mood.map((m: any) => <span key={m.id} className="text-2xl" title={m.entry_date}>{m.mood}</span>)}</div>
-              </Section>
-            )}
             {partnerData.goals?.length > 0 && (
               <Section title="Goals">
-                <ul className="space-y-1">{partnerData.goals.map((g: any) => <li key={g.id} className="text-sm">{g.done ? "✓" : "○"} {g.title}</li>)}</ul>
-              </Section>
-            )}
-            {partnerData.worship?.length > 0 && (
-              <Section title="Worship">
-                <ul className="text-sm">{partnerData.worship.map((r: any) => <li key={r.id}>{r.entry_date}: 📖 {r.pages} · 📿 {r.adhkar}</li>)}</ul>
+                <ul className="space-y-1">
+                  {partnerData.goals.map((g: any) => (
+                    <li key={g.id} className="text-sm">
+                      {g.done ? "✓" : "○"} {g.title}
+                    </li>
+                  ))}
+                </ul>
               </Section>
             )}
             {partnerData.unsent?.length > 0 && (
@@ -132,7 +143,23 @@ function UnlockPage() {
                 {partnerData.unsent.map((u: any) => (
                   <div key={u.id} className="py-2 border-b border-border/40">
                     <p className="text-xs text-muted-foreground">{new Date(u.created_at).toLocaleDateString()}</p>
-                    {u.kind === "text" ? <p className="mt-1 whitespace-pre-wrap">{u.text_content}</p> : <AudioPlayer path={u.audio_path} />}
+                    {u.kind === "text" ? (
+                      <p className="mt-1 whitespace-pre-wrap text-sm">{u.text_content}</p>
+                    ) : u.kind === "audio" && u.audio_path ? (
+                      <button
+                        onClick={() => setOverlay({ kind: "audio", bucket: "unsent-audio", path: u.audio_path })}
+                        className="mt-1 text-sm text-primary hover:underline"
+                      >
+                        🎙 audio
+                      </button>
+                    ) : u.kind === "image" && u.image_path ? (
+                      <button
+                        onClick={() => setOverlay({ kind: "image", bucket: "unsent-images", path: u.image_path })}
+                        className="mt-1 text-sm text-primary hover:underline"
+                      >
+                        🖼 photo
+                      </button>
+                    ) : null}
                   </div>
                 ))}
               </Section>
@@ -140,6 +167,16 @@ function UnlockPage() {
           </div>
         )}
       </div>
+
+      {overlay && (
+        <MediaOverlay
+          open={!!overlay}
+          onClose={() => setOverlay(null)}
+          bucket={overlay.bucket}
+          path={overlay.path}
+          kind={overlay.kind}
+        />
+      )}
     </div>
   );
 }
@@ -151,12 +188,4 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <div>{children}</div>
     </div>
   );
-}
-function AudioPlayer({ path }: { path: string }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    supabase.storage.from("unsent-audio").createSignedUrl(path, 3600).then(({ data }) => setUrl(data?.signedUrl ?? null));
-  }, [path]);
-  if (!url) return <p className="text-sm text-muted-foreground">Loading…</p>;
-  return <audio src={url} controls className="w-full mt-1" />;
 }

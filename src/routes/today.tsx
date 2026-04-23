@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useSession } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
-import { MILESTONES, STATUS_OPTIONS, daysBetween, statusMeta, type StatusKey } from "@/lib/statuses";
+import { MILESTONES, STATUS_OPTIONS, daysAndHoursBetween, daysBetween, statusMeta, type StatusKey } from "@/lib/statuses";
 import { resetCounter } from "@/server/journey.functions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -13,17 +13,34 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { History, Heart } from "lucide-react";
+import { History, Heart, RefreshCw } from "lucide-react";
 import { insertWithOfflineQueue } from "@/lib/data-client";
-import { notify, requestNotificationPermission } from "@/lib/notifications";
+import { notify } from "@/lib/notifications";
 import { PartnerActivity } from "@/components/PartnerActivity";
+import { daysUntilNextBirthday } from "@/lib/birthday";
 
 export const Route = createFileRoute("/today")({
-  component: () => (<RequireAuth><AppShell><TodayPage /></AppShell></RequireAuth>),
+  component: () => (
+    <RequireAuth>
+      <AppShell>
+        <TodayPage />
+      </AppShell>
+    </RequireAuth>
+  ),
 });
 
 type Row = { id: string; user_id: string; status: string; created_at: string };
 type Break = { id: string; broken_by: "him" | "her"; note: string | null; created_at: string };
+
+const PING_COOLDOWN_MS = 3 * 60 * 60 * 1000; // 3 hours
+const STATUS_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+function formatRemaining(ms: number) {
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  if (h <= 0) return `${m}m`;
+  return `${h}h ${m}m`;
+}
 
 function TodayPage() {
   const { profile, partnerProfile, journey, refresh } = useSession();
@@ -36,9 +53,11 @@ function TodayPage() {
   const [busyReset, setBusyReset] = useState(false);
   const [who, setWho] = useState<"him" | "her">("him");
   const [note, setNote] = useState("");
-  const [canPing, setCanPing] = useState(true);
-  const [showDigest, setShowDigest] = useState(false);
-  const [digestLine, setDigestLine] = useState<string>("");
+  const [pingExpiresAt, setPingExpiresAt] = useState<number>(0);
+  const [pendingStatus, setPendingStatus] = useState<StatusKey | null>(null);
+  const [tick, setTick] = useState(0);
+
+  const partnerBirthdayDays = daysUntilNextBirthday((partnerProfile as any)?.birthday ?? null);
 
   const load = async () => {
     if (!journey || !profile) return;
@@ -53,43 +72,28 @@ function TodayPage() {
     if (partnerProfile) setTheirs(rows.find((r) => r.user_id === partnerProfile.id) ?? null);
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [profile?.id, journey?.id, partnerProfile?.id]);
   useEffect(() => {
-    requestNotificationPermission().catch(() => undefined);
-  }, []);
+    load();
+    /* eslint-disable-next-line */
+  }, [profile?.id, journey?.id, partnerProfile?.id]);
 
   useEffect(() => {
     if (!profile) return;
     const key = `shared-silance:last-ping:${profile.id}`;
     const raw = window.localStorage.getItem(key);
-    if (!raw) return;
-    const elapsed = Date.now() - Number(raw);
-    setCanPing(elapsed > 3 * 60 * 60 * 1000);
+    if (!raw) {
+      setPingExpiresAt(0);
+      return;
+    }
+    setPingExpiresAt(Number(raw) + PING_COOLDOWN_MS);
   }, [profile]);
 
+  // 1-min tick to update countdown labels
   useEffect(() => {
-    const now = new Date();
-    setShowDigest(now.getDay() === 0);
+    const id = window.setInterval(() => setTick((t) => t + 1), 60_000);
+    return () => window.clearInterval(id);
   }, []);
-  useEffect(() => {
-    const loadDigestLine = async () => {
-      if (!profile || !showDigest) return;
-      const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const { data } = await supabase
-        .from("journal_entries")
-        .select("body, body_encrypted")
-        .eq("user_id", profile.id)
-        .lt("created_at", monthStart)
-        .order("created_at", { ascending: false })
-        .limit(20);
-      const lines = (data ?? [])
-        .map((r: any) => (r.body || "").trim())
-        .filter((v: string) => v.length > 0);
-      if (lines.length > 0) setDigestLine(lines[Math.floor(Math.random() * lines.length)]);
-    };
-    loadDigestLine().catch(() => undefined);
-  }, [profile, showDigest]);
+
   useEffect(() => {
     const checkPing = async () => {
       if (!profile) return;
@@ -104,52 +108,61 @@ function TodayPage() {
       const key = `shared-silance:last-seen-ping:${profile.id}`;
       const seen = window.localStorage.getItem(key);
       if (seen !== data.id) {
-        await notify("Shared Silance", "Someone is thinking of you right now 🤍");
+        await notify("Our Journey", "Someone is thinking of you right now 🤍");
         window.localStorage.setItem(key, data.id);
       }
     };
     checkPing().catch(() => undefined);
   }, [profile]);
 
-  const setStatus = async (key: StatusKey) => {
-    if (!profile || !journey) return;
+  const cooldownMs = mine ? new Date(mine.created_at).getTime() + STATUS_COOLDOWN_MS - Date.now() : 0;
+  const cooldownRemaining = cooldownMs > 0 ? formatRemaining(cooldownMs) : null;
+  void tick; // re-render trigger
+
+  const pingMsLeft = pingExpiresAt > 0 ? pingExpiresAt - Date.now() : 0;
+  const canPing = pingMsLeft <= 0;
+
+  const submitStatus = async () => {
+    if (!profile || !journey || !pendingStatus) return;
     setSubmitting(true);
     const { error, queued } = await insertWithOfflineQueue("daily_statuses", {
-      user_id: profile.id, journey_id: journey.id, status: key,
+      user_id: profile.id,
+      journey_id: journey.id,
+      status: pendingStatus,
     });
     setSubmitting(false);
     if (queued) {
-      toast.message("You're offline — your entry will sync when you reconnect");
+      toast.message("You're offline — your update will sync when you reconnect");
+      setPendingStatus(null);
       return;
     }
     if (error) {
-      toast.error(error.message.includes("12 hours") ? "You've already shared today. Try again in 12 hours." : error.message);
+      toast.error(
+        error.message.includes("6 hours")
+          ? "You can only share once every 6 hours."
+          : error.message,
+      );
       return;
     }
-    toast.success("Status shared");
+    setPendingStatus(null);
+    toast.success("Update shared");
+    // Best-effort partner push notification
+    if (partnerProfile?.id && profile.username) {
+      try {
+        const { notifyPartnerUpdate } = await import("@/server/journey.functions");
+        await (notifyPartnerUpdate as any)({
+          data: { partnerId: partnerProfile.id, message: `@${profile.username} sent you an update 🤍` },
+        });
+      } catch {
+        /* push is best-effort */
+      }
+    }
     load();
   };
 
-  const cooldownRemaining = (() => {
-    if (!mine) return null;
-    const next = new Date(mine.created_at).getTime() + 12 * 3600 * 1000;
-    const ms = next - Date.now();
-    if (ms <= 0) return null;
-    const h = Math.floor(ms / 3600000);
-    const m = Math.floor((ms % 3600000) / 60000);
-    return `${h}h ${m}m`;
-  })();
-  const noContactDays = journey ? daysBetween(journey.nc_start_date) : 0;
+  const noContact = journey ? daysAndHoursBetween(journey.nc_start_date) : { days: 0, hours: 0 };
   const talkingDays = journey?.talking_since ? daysBetween(journey.talking_since) : 0;
   const counterLabel = profile?.counter_label?.trim() || "Days of no contact";
-  const lastCheckInAt = mine ? new Date(mine.created_at).getTime() : 0;
-  const missedWindow = lastCheckInAt > 0 && Date.now() - lastCheckInAt > 24 * 3600 * 1000;
-  const weekCount = history.filter((r) => {
-    const d = new Date(r.created_at);
-    const now = new Date();
-    return d >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
-  }).length;
-  const avgMood = "—";
 
   const sendThinkingPing = async () => {
     if (!profile || !partnerProfile || !journey || !canPing) return;
@@ -158,24 +171,11 @@ function TodayPage() {
       receiver_id: partnerProfile.id,
     });
     if (error) return toast.error(error.message);
-    window.localStorage.setItem(`shared-silance:last-ping:${profile.id}`, String(Date.now()));
-    setCanPing(false);
+    const now = Date.now();
+    window.localStorage.setItem(`shared-silance:last-ping:${profile.id}`, String(now));
+    setPingExpiresAt(now + PING_COOLDOWN_MS);
     toast.success("Sent.");
   };
-
-  useEffect(() => {
-    const logMiss = async () => {
-      if (!profile || !mine || !missedWindow) return;
-      const key = `shared-silance:miss-log:${profile.id}:${new Date().toISOString().slice(0, 10)}`;
-      if (window.localStorage.getItem(key)) return;
-      await supabase.from("checkin_miss_log").insert({
-        user_id: profile.id,
-        missed_date: new Date().toISOString().slice(0, 10),
-      });
-      window.localStorage.setItem(key, "1");
-    };
-    logMiss().catch(() => undefined);
-  }, [profile, mine, missedWindow]);
 
   const submitReset = async () => {
     setBusyReset(true);
@@ -200,43 +200,21 @@ function TodayPage() {
         <p className="text-muted-foreground italic mt-1">Your journey at a glance.</p>
       </div>
 
-      <PartnerActivity partnerId={partnerProfile?.id} partnerUsername={partnerProfile?.username} />
-
-      {showDigest && (
-        <div className="parchment-card rounded-2xl p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="text-sm">
-              <p className="font-display tracking-wider">Weekly summary</p>
-              <p className="text-muted-foreground">Check-ins this week: {weekCount} · No-contact: {noContactDays} · Avg mood: {avgMood}</p>
-              {digestLine && <p className="text-muted-foreground mt-1 italic">From a previous month: "{digestLine.slice(0, 140)}"</p>}
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => setShowDigest(false)}>Dismiss</Button>
-          </div>
-        </div>
-      )}
-      <div className="parchment-card rounded-2xl p-6 text-center space-y-4">
-        <p className="font-display text-xs uppercase tracking-[0.35em] text-muted-foreground">{counterLabel}</p>
-        <div className="font-display text-6xl text-primary tabular-nums">{noContactDays}</div>
-        <p className="text-xs text-muted-foreground">Since {journey ? new Date(journey.nc_start_date + "T00:00").toLocaleDateString() : "—"}</p>
-        <div className="flex flex-wrap justify-center gap-2">
-          {MILESTONES.map((m) => (
-            <span
-              key={m}
-              className={[
-                "rounded-full border px-3 py-1 text-xs font-display tracking-widest",
-                noContactDays >= m ? "border-primary/40 bg-primary/15 text-primary" : "border-border bg-muted text-muted-foreground",
-              ].join(" ")}
-            >
-              {m}d
-            </span>
-          ))}
-        </div>
+      {/* Top counters: NC full-width, then talking + birthday side by side */}
+      <div className="parchment-card rounded-2xl p-6 text-center space-y-3 relative">
         <Dialog open={resetOpen} onOpenChange={setResetOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" className="w-full h-11">Reset counter</Button>
+            <button
+              aria-label="Reset counter"
+              className="absolute top-3 right-3 size-8 rounded-full text-muted-foreground/60 hover:text-muted-foreground hover:bg-accent/40 inline-flex items-center justify-center transition-colors"
+            >
+              <RefreshCw className="size-4" />
+            </button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle className="font-display tracking-widest">RESET COUNTER</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle className="font-display tracking-widest">RESET COUNTER</DialogTitle>
+            </DialogHeader>
             <div className="space-y-4">
               <div>
                 <Label className="font-display text-xs uppercase tracking-widest">Who broke it?</Label>
@@ -256,51 +234,112 @@ function TodayPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
-
-      <div className="parchment-card rounded-2xl p-6 text-center">
-        <p className="font-display text-xs uppercase tracking-[0.35em] text-muted-foreground">Days since we started talking</p>
-        <div className="mt-2 font-display text-5xl text-primary tabular-nums">{talkingDays}</div>
-        <p className="text-xs text-muted-foreground mt-2">Since {journey?.talking_since ? new Date(`${journey.talking_since}T00:00:00`).toLocaleDateString() : "—"}</p>
-      </div>
-
-      {missedWindow && (
-        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-muted-foreground">
-          Gentle nudge: you have not checked in yet in your rolling 24-hour window.
+        <p className="font-display text-xs uppercase tracking-[0.35em] text-muted-foreground">{counterLabel}</p>
+        <div className="font-display text-5xl sm:text-6xl text-primary tabular-nums">
+          {noContact.days}
+          <span className="text-2xl sm:text-3xl text-primary/70"> days, {noContact.hours}h</span>
         </div>
-      )}
-
-      <div className="grid sm:grid-cols-2 gap-4">
-        <StatusCard label="You" name={profile?.display_name ?? "You"} row={mine} />
-        <StatusCard label="Them" name={partnerProfile?.display_name ?? "—"} row={theirs} />
+        <p className="text-xs text-muted-foreground">
+          Since {journey ? new Date(journey.nc_start_date + "T00:00").toLocaleDateString() : "—"}
+        </p>
+        <div className="flex flex-wrap justify-center gap-2">
+          {MILESTONES.map((m) => (
+            <span
+              key={m}
+              className={[
+                "rounded-full border px-3 py-1 text-[11px] font-display tracking-widest",
+                noContact.days >= m
+                  ? "border-primary/40 bg-primary/15 text-primary"
+                  : "border-border bg-muted text-muted-foreground",
+              ].join(" ")}
+            >
+              {m}d
+            </span>
+          ))}
+        </div>
       </div>
 
-      <div className="parchment-card rounded-2xl p-6">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="parchment-card rounded-2xl p-4 text-center">
+          <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">Days talking</p>
+          <div className="mt-1 font-display text-3xl text-primary tabular-nums">{talkingDays}</div>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Since {journey?.talking_since ? new Date(`${journey.talking_since}T00:00:00`).toLocaleDateString() : "—"}
+          </p>
+        </div>
+        <div className="parchment-card rounded-2xl p-4 text-center">
+          <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+            @{partnerProfile?.username ?? "partner"}'s birthday
+          </p>
+          <div className="mt-1 font-display text-3xl text-primary tabular-nums">
+            {partnerBirthdayDays === null ? "—" : partnerBirthdayDays === 0 ? "🎂" : partnerBirthdayDays}
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            {partnerBirthdayDays === null
+              ? "not set"
+              : partnerBirthdayDays === 0
+                ? "today!"
+                : `day${partnerBirthdayDays === 1 ? "" : "s"} away`}
+          </p>
+        </div>
+      </div>
+
+      {/* Side-by-side updates: yours (full content) | partner presence */}
+      <div className="grid grid-cols-2 gap-3">
+        <YourUpdateCard row={mine} name={profile?.display_name ?? "You"} />
+        <div className="parchment-card rounded-2xl p-4 flex flex-col items-center justify-center text-center min-h-[140px]">
+          <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground mb-2">
+            @{partnerProfile?.username ?? "partner"}
+          </p>
+          <PartnerActivity partnerId={partnerProfile?.id} partnerUsername={partnerProfile?.username} />
+          {theirs && (
+            <p className="text-[10px] text-muted-foreground mt-2">
+              {new Date(theirs.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* 16-option update grid */}
+      <div className="parchment-card rounded-2xl p-5">
         <h3 className="font-display text-sm uppercase tracking-widest text-muted-foreground text-center mb-4">
           {cooldownRemaining ? `Next update in ${cooldownRemaining}` : "How are you, right now?"}
         </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {STATUS_OPTIONS.map((s) => (
-            <button
-              key={s.key}
-              disabled={submitting || !!cooldownRemaining}
-              onClick={() => setStatus(s.key)}
-              className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card hover:bg-accent/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors p-4"
-            >
-              <span className="text-3xl">{s.emoji}</span>
-              <span className="text-sm">{s.label}</span>
-            </button>
-          ))}
+        <div className="grid grid-cols-2 gap-2">
+          {STATUS_OPTIONS.map((s) => {
+            const selected = pendingStatus === s.key;
+            return (
+              <button
+                key={s.key}
+                disabled={submitting || !!cooldownRemaining}
+                onClick={() => setPendingStatus(s.key)}
+                className={[
+                  "flex items-center gap-2 rounded-xl border bg-card hover:bg-accent/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors p-3 text-left",
+                  selected ? "border-primary bg-primary/10" : "border-border",
+                ].join(" ")}
+              >
+                <span className="text-xl shrink-0">{s.emoji}</span>
+                <span className="text-xs leading-tight">{s.label}</span>
+              </button>
+            );
+          })}
         </div>
-        <Button variant="outline" className="w-full mt-4" onClick={sendThinkingPing} disabled={!canPing}>
+        <Button
+          className="w-full mt-4"
+          onClick={submitStatus}
+          disabled={!pendingStatus || submitting || !!cooldownRemaining}
+        >
+          {submitting ? "Sending…" : "Confirm update"}
+        </Button>
+        <Button variant="outline" className="w-full mt-2" onClick={sendThinkingPing} disabled={!canPing}>
           <Heart className="size-4" />
-          {canPing ? "Thinking of you" : "Thinking ping sent recently"}
+          {canPing ? "Thinking of you" : `Available again in ${formatRemaining(pingMsLeft)}`}
         </Button>
       </div>
 
       {(journey?.has_been_reset || breaks.length > 0) && (
-        <div className="parchment-card rounded-2xl p-6">
-          <h3 className="font-display text-sm uppercase tracking-widest text-muted-foreground mb-4">Break log</h3>
+        <div className="parchment-card rounded-2xl p-5">
+          <h3 className="font-display text-sm uppercase tracking-widest text-muted-foreground mb-3">Break log</h3>
           {breaks.length === 0 && <p className="text-sm italic text-muted-foreground">No breaks recorded.</p>}
           <ul className="space-y-3">
             {breaks.map((b) => (
@@ -343,15 +382,19 @@ function TodayPage() {
   );
 }
 
-function StatusCard({ label, name, row }: { label: string; name: string; row: Row | null }) {
+function YourUpdateCard({ row, name }: { row: Row | null; name: string }) {
   const m = row ? statusMeta(row.status) : null;
   return (
-    <div className="parchment-card rounded-2xl p-6 text-center">
-      <p className="font-display text-xs uppercase tracking-[0.3em] text-muted-foreground">{label}</p>
-      <p className="font-display text-lg mt-1">{name}</p>
-      <div className="my-6 text-6xl">{m?.emoji ?? "·"}</div>
-      <p className="text-base">{m?.label ?? "Not yet today"}</p>
-      {row && <p className="text-xs text-muted-foreground mt-2">{new Date(row.created_at).toLocaleString()}</p>}
+    <div className="parchment-card rounded-2xl p-4 text-center min-h-[140px] flex flex-col items-center justify-center">
+      <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">You</p>
+      <p className="font-display text-xs mt-1">{name}</p>
+      <div className="my-2 text-3xl">{m?.emoji ?? "·"}</div>
+      <p className="text-xs leading-tight">{m?.label ?? "Not yet today"}</p>
+      {row && (
+        <p className="text-[10px] text-muted-foreground mt-1">
+          {new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        </p>
+      )}
     </div>
   );
 }
