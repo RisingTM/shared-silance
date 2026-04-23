@@ -25,7 +25,7 @@ import { daysBetween } from "@/lib/statuses";
 const TABS = [
   { to: "/today", label: "Today", icon: Heart },
   { to: "/private", label: "Private", icon: Sparkles },
-  { to: "/dua", label: "Dua", icon: BookOpen },
+  { to: "/deen", label: "Deen", icon: BookOpen },
   { to: "/unlock", label: "Unlock", icon: Unlock },
 ] as const;
 

@@ -366,7 +366,7 @@ function Unsent({ canDelete }: { canDelete: boolean }) {
     await uploadAudio(f, f.name.split(".").pop() ?? "mp3");
     if (audioFileRef.current) audioFileRef.current.value = "";
   };
-  const onImageFile = async (e: React.ChangeEvent<HTMLInputElement>, ref: React.RefObject<HTMLInputElement>) => {
+  const onImageFile = async (e: React.ChangeEvent<HTMLInputElement>, ref: React.RefObject<HTMLInputElement | null>) => {
     const f = e.target.files?.[0];
     if (!f) return;
     await uploadImage(f, f.name.split(".").pop() ?? "png");
