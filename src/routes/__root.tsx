@@ -24,10 +24,16 @@ export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: "OUR JOURNEY" },
       { name: "description", content: "I MISS YOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU." },
       { name: "author", content: "Our Journey" },
+      { name: "theme-color", content: "#f5ecd9", media: "(prefers-color-scheme: light)" },
+      { name: "theme-color", content: "#1a1715", media: "(prefers-color-scheme: dark)" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "default" },
+      { name: "apple-mobile-web-app-title", content: "Our Journey" },
+      { name: "mobile-web-app-capable", content: "yes" },
       { property: "og:title", content: "OUR JOURNEY" },
       { property: "og:description", content: "I MISS YOUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU." },
       { property: "og:type", content: "website" },
@@ -37,7 +43,12 @@ export const Route = createRootRoute({
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/b231afa3-6508-4878-afb6-82bbce771b0b/id-preview-f0ec22ab--3c2f1794-56fe-4f98-9603-326eec6e2283.lovable.app-1776711128448.png" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "icon", href: "/favicon.ico" },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
@@ -61,7 +72,31 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+
+    const inIframe = (() => {
+      try {
+        return window.self !== window.top;
+      } catch {
+        return true;
+      }
+    })();
+    const host = window.location.hostname;
+    const isPreview =
+      host.includes("id-preview--") ||
+      host.includes("lovableproject.com") ||
+      host === "localhost" ||
+      host === "127.0.0.1";
+
+    if (inIframe || isPreview) {
+      // Make sure no stale SW is left behind in preview/iframe contexts.
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((regs) => regs.forEach((r) => r.unregister().catch(() => undefined)))
+        .catch(() => undefined);
+      return;
+    }
+
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
   }, []);
 
   return (
