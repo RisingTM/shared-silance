@@ -133,18 +133,6 @@ function TrackerCard({ title, children }: { title: string; children: React.React
   );
 }
 
-function YouPartnerLabels({ partnerUsername }: { partnerUsername: string | null | undefined }) {
-  return (
-    <div className="grid grid-cols-[3rem_1fr] items-center gap-2">
-      <span />
-      <div className="flex justify-between gap-2 text-[10px] font-display uppercase tracking-widest text-muted-foreground">
-        <span>You</span>
-        <span className="truncate">@{partnerUsername ?? "partner"}</span>
-      </div>
-    </div>
-  );
-}
-
 function PrayerTracker() {
   const { user, partnerProfile } = useSession();
   const ws = useMemo(() => weekStartSaturday(), []);
