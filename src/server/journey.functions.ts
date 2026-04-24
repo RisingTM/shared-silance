@@ -218,15 +218,79 @@ export const resetCounter = createServerFn({ method: "POST" })
     const { supabase } = context;
     const { data: profile } = await supabase.from("profiles").select("journey_id").eq("id", context.userId).single();
     if (!profile) throw new Error("No journey");
-    const today = new Date().toISOString().slice(0, 10);
+    const nowIso = new Date().toISOString();
+    const today = nowIso.slice(0, 10);
     const { error: brkErr } = await supabaseAdmin
       .from("nc_breaks")
-      .insert({ journey_id: profile.journey_id, broken_by: data.brokenBy, note: data.note ?? null });
+      .insert({ journey_id: profile.journey_id, broken_by: data.brokenBy, note: data.note ?? null, kind: "reset" });
     if (brkErr) throw new Error(brkErr.message);
     const { error: jErr } = await supabaseAdmin
       .from("journeys")
-      .update({ nc_start_date: today, has_been_reset: true })
+      .update({
+        nc_start_date: today,
+        nc_start_at: nowIso,
+        has_been_reset: true,
+        is_paused: false,
+        paused_at: null,
+        paused_total_seconds: 0,
+      })
       .eq("id", profile.journey_id);
     if (jErr) throw new Error(jErr.message);
+    return { ok: true };
+  });
+
+// ----- Pause / resume the NC counter (either user) -----
+export const pauseCounter = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("journey_id, role")
+      .eq("id", context.userId)
+      .single();
+    if (!profile) throw new Error("No journey");
+    const { data: j } = await supabaseAdmin
+      .from("journeys")
+      .select("is_paused")
+      .eq("id", profile.journey_id)
+      .single();
+    if (j?.is_paused) throw new Error("Counter is already paused");
+    const nowIso = new Date().toISOString();
+    const { error: jErr } = await supabaseAdmin
+      .from("journeys")
+      .update({ is_paused: true, paused_at: nowIso })
+      .eq("id", profile.journey_id);
+    if (jErr) throw new Error(jErr.message);
+    await supabaseAdmin
+      .from("nc_breaks")
+      .insert({ journey_id: profile.journey_id, broken_by: profile.role === "owner" ? "him" : "her", kind: "pause", note: null });
+    return { ok: true };
+  });
+
+export const resumeCounter = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("journey_id, role")
+      .eq("id", context.userId)
+      .single();
+    if (!profile) throw new Error("No journey");
+    const { data: j } = await supabaseAdmin
+      .from("journeys")
+      .select("is_paused, paused_at, paused_total_seconds")
+      .eq("id", profile.journey_id)
+      .single();
+    if (!j?.is_paused || !j.paused_at) throw new Error("Counter is not paused");
+    const deltaSec = Math.max(0, Math.floor((Date.now() - new Date(j.paused_at).getTime()) / 1000));
+    const newTotal = (j.paused_total_seconds ?? 0) + deltaSec;
+    const { error: jErr } = await supabaseAdmin
+      .from("journeys")
+      .update({ is_paused: false, paused_at: null, paused_total_seconds: newTotal })
+      .eq("id", profile.journey_id);
+    if (jErr) throw new Error(jErr.message);
+    await supabaseAdmin
+      .from("nc_breaks")
+      .insert({ journey_id: profile.journey_id, broken_by: profile.role === "owner" ? "him" : "her", kind: "resume", note: null });
     return { ok: true };
   });
