@@ -1,172 +1,110 @@
 
 
-# Big update: PWA fixes, Deen page, Private restructure, Today redesign + more
+# Counter hours + pause/resume, break log icon, partner status, shared Deen
 
-This is a large set of changes. I'll group them into logical phases so we can review the shape before I touch code. No code is written in plan mode.
+## 1. NC counter — true timestamp + live hours
 
-## 1. PWA full audit & fix
+**Schema (migration)**
+- `journeys.nc_start_at timestamptz` — exact reset moment. Backfill from existing `nc_start_date` at midnight local-equivalent (use `nc_start_date::timestamptz`).
+- Keep `nc_start_date` for back-compat reads but stop relying on it for hours.
 
-**What's broken now**
-- SW registration runs unconditionally in `__root.tsx` — registers inside the Lovable preview iframe, which causes stale content and breaks HMR.
-- `sw.js` caches every `supabase.co` request including POST/auth calls — invalid (POST can't be cached) and a security risk (caches authed JSON).
-- No old-cache cleanup in `activate`.
-- Manifest icons reference `/icon-192.png`, `/icon-512.png`, `/icon-maskable-512.png` but `__root.tsx` `apple-touch-icon` / theme-color / iOS meta tags aren't set, and I need to verify the icon files actually exist in `public/`.
-- Notification permission isn't gated on login.
-- `notifications.ts` doesn't handle `denied` gracefully and has no daily reminder scheduler.
-- `offline-queue.ts` has no online/offline listeners and no flush logic — entries just sit in localStorage.
+**Server**
+- `resetCounter` writes `nc_start_at = now()` (in addition to `nc_start_date = today` so legacy code keeps working).
 
-**Fixes**
-- `public/sw.js` rewrite:
-  - Versioned caches `static-v2` / `data-v2`; `activate` deletes any cache not in the allowlist + `clients.claim()`.
-  - `fetch` handler: skip non-GET entirely (`event.request.method !== "GET"` → return). Skip `supabase.co/auth/*` and any request with an `Authorization` header. Static assets → cache-first. Other GETs → network-first with cache fallback.
-  - `notificationclick` handler: focus existing client or open `/today`.
-- `__root.tsx`:
-  - Guard registration: skip if `window.self !== window.top` (iframe) or hostname contains `lovableproject.com` / `id-preview--`. Also unregister any existing SW in those contexts to clean up past registrations.
-  - Add `<link rel="manifest">`, `<meta name="theme-color">` (light + dark via `media`), `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style="default"`, `apple-touch-icon`.
-- Verify/create the four icon files in `public/` (`icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png`). If missing, generate simple parchment-tone placeholders so the manifest validates and install prompts work.
-- `src/lib/notifications.ts`:
-  - Handle `granted` / `denied` / `default` explicitly; on `denied` return silently.
-  - Add `scheduleDailyReminder(time: "HH:MM")` using `setTimeout` to next occurrence, then `setInterval` 24h, with cleanup handle.
-  - All calls wrapped in `"Notification" in window` checks so unsupported browsers no-op.
-  - Permission request only fires from `AppShell` after `useSession` confirms a logged-in user (not at module load).
-- `src/lib/offline-queue.ts`:
-  - Add `initOfflineQueue()` that wires `online`/`offline` listeners, shows a sonner toast only when actually offline (`!navigator.onLine`), and flushes the queue on `online`.
-  - Flush iterates queued entries and pushes them through the supabase client; failed items stay queued.
-  - Called once from `AppShell` mount.
+**Client**
+- `daysAndHoursBetween(startISO)` already supports timestamps — extend it to accept either a date-only or full ISO and parse accordingly.
+- `today.tsx` reads `journey.nc_start_at` (fallback to `nc_start_date`).
+- A `setInterval` already ticks every 60s on the page → hours update live.
+- Display unchanged: `{days} days, {hours}h`.
 
-## 2. No-contact counter — hours + subtle reset
+## 2. Break log — behind a subtle icon button
 
-- Compute `days` and `hours` from `nc_start_date` (treat as midnight start) → render "47 days, 6 hours".
-- Replace the labeled reset button with a small ghost icon button (`RefreshCw` 16px) tucked top-right of the counter card. Same confirm dialog as today.
+- Remove the inline break-log card from `today.tsx`.
+- Add a second small ghost icon button next to the reset icon (top-right of NC card) using `ScrollText` (or `History`) icon.
+- Tap opens a `Sheet`/`Dialog` listing all `nc_breaks` rows: date, who broke it, optional note, and (new) entry kind for pause/resume events.
 
-## 3. Mobile layout — counters + today updates side-by-side
+## 3. Pause / resume the counter
 
-- New top section on `/today`: stacked layout
-  - Row 1 (full width): "Days of no contact" big counter.
-  - Row 2 (2 columns on mobile): "Days since we started talking" | "@partner's birthday in N days".
-- Birthday card moves out of Settings → still editable in Settings, but display lives on home.
-- Today updates block: 2-column grid on mobile showing "Your update" (full content) | "@partner" (presence pill from `PartnerActivity`, no content).
+**Schema (same migration)**
+- `journeys.is_paused boolean default false`
+- `journeys.paused_at timestamptz` — when current pause began
+- `journeys.paused_total_seconds bigint default 0` — accumulated paused time across previous pauses
+- Extend `nc_breaks.kind text` (or a new `event_type` column) to allow values `reset` (default for legacy rows) / `pause` / `resume` so the break log can show pause history. Backfill existing rows to `reset`.
 
-## 4. Unsent thoughts — picture inputs + minimal media log
+  *Note: `nc_breaks.broken_by` is currently NOT NULL — make it nullable (or set a placeholder) for pause/resume rows.*
 
-**New inputs in Unsent Thoughts tab**
-- "Take picture" → `<input type="file" accept="image/*" capture="environment">`.
-- "Upload picture" → `<input type="file" accept="image/*">`.
-- "Paste screenshot" → window `paste` listener while tab is mounted; reads `ClipboardEvent.clipboardData.items` for image blobs.
+**Server functions** (new in `journey.functions.ts`)
+- `pauseCounter` — owner or partner: confirm not already paused, set `is_paused=true`, `paused_at=now()`, insert `nc_breaks` row with `kind='pause'`.
+- `resumeCounter` — confirm currently paused, compute `delta = now() - paused_at`, update `paused_total_seconds += delta`, set `is_paused=false`, `paused_at=null`, insert `nc_breaks` row with `kind='resume'`.
 
-**Storage**
-- New bucket `unsent-images` (private) with RLS `auth.uid()::text = (storage.foldername(name))[1]`, mirroring `unsent-audio`.
-- Path pattern: `{user_id}/{uuid}.{ext}`.
+**Client**
+- New small icon next to reset: `Pause` (when running) / `Play` (when paused). Confirm dialog: "Are you sure you want to pause? This means you are in contact right now."
+- Effective elapsed time formula:
+  - `base = journey.nc_start_at`
+  - `endpoint = is_paused ? paused_at : now()`
+  - `elapsedMs = endpoint - base - (paused_total_seconds * 1000)`
+  - Render `daysAndHoursBetween` against this elapsed value (refactor helper to accept ms).
+- When paused: show soft "paused" pill in place of the hours portion (still shows accumulated days+hours frozen at `paused_at`).
+- `useSession` refresh after pause/resume so both users see it (already polls on focus/visibility — add a `journey` refetch via `refresh()` after the action; the partner sees it on next focus).
 
-**Schema**
-- `unsent_thoughts.kind` already supports values; add `image` value usage. Reuse `audio_path` semantics by adding `image_path text` column.
+## 4. Today page — partner's actual update visible
 
-**Log UI**
-- Each entry renders as a minimal row: icon + label only (`📝 text` / `🎙 audio` / `🖼 photo`) + timestamp + optional delete (see #10).
-- Tap audio → overlay (Dialog) with `<audio controls>`, progress, play/pause, download button (signed URL → anchor `download`).
-- Tap photo → fullscreen Dialog with the image; pinch-zoom via CSS `touch-action: pinch-zoom` + a wrapper using native gestures (no extra lib). Download button included.
+- Replace the `<PartnerActivity>` presence pill in the right column with the partner's most recent `daily_statuses` row inside the current 6h window (already loaded as `theirs`).
+- Render the same `YourUpdateCard` shape for the partner (`emoji`, label, time, username header) — full visual parity with the left column, equal `min-h`.
+- If `theirs` is null OR `theirs.created_at` is older than 6h: show soft `waiting for @{username}…` muted state inside the same card frame.
+- Delete the `PartnerActivity` import + usage from `today.tsx` (component file stays for now; not used elsewhere). 3×1 counter row above is untouched.
 
-## 5. Deen page (replaces Worship + Dua)
+## 5. Deen page — shared visibility + clean week header
 
-- Rename route file `src/routes/dua.tsx` → `src/routes/deen.tsx` (update sidebar link in `AppShell`). Page title "DEEN".
-- Keep all existing dua content (daily dua, personal duas) at the top.
-- Below, add tracker cards. Shared component `<WeekCircles days={booleanArr} onToggle={...} />` rendering Sa Su Mo Tu We Th Fr (week starts Saturday).
-- Week key = ISO-style `YYYY-Www` but anchored to Saturday; reset is automatic because each week has its own row.
-- Date range header "Apr 19 – Apr 25" computed from current Saturday.
+**Data**
+- For each tracker, also fetch the partner's row(s) for the same `week_start` (Quran: their single row). RLS on `deen_*` tables is currently `user_id = auth.uid()` — partner can't read.
+- **Migration**: add a SELECT policy on each Deen table allowing `user_id = partner_user_id()` (read-only). Keep existing all-actions policy unchanged for self.
 
-**New tables (single migration)**
-- `deen_prayers (id, user_id, week_start date, prayer text, days bool[7], updated_at)` — one row per user per week per prayer.
-- `deen_quran (id, user_id, current_page int, updated_at)` — single row per user; `+1` increments and bumps timestamp. Optional `deen_quran_log (user_id, log_date date, pages int)` for daily delta if needed for calendar; include for completeness.
-- `deen_athkar (id, user_id, week_start, kind text /* 'morning'|'evening' */, days bool[7])`.
-- `deen_dhikr (id, user_id, kind text /* 'subhanallah'|'alhamdulillah'|'allahuakbar'|'custom' */, count int, updated_at)` — one row per user per kind; `+1` increments.
-- `deen_fasting (id, user_id, week_start, days bool[7])`.
+**UI per tracker card**
+- Header shows the week range exactly once (kept in `TrackerCard`); remove any duplicated label inside trackers.
+- Body becomes a 2-column section: `You` | `@{partnerUsername}`.
+  - Prayer: under each prayer name, two rows of `WeekCircles` labeled You / @partner; partner row uses `readOnly`.
+  - Quran: side-by-side current page numbers (no +1 button on partner side).
+  - Athkar: morning + evening rows duplicated for partner (read-only); dhikr counter displays partner's counts read-only beside the user's tap buttons.
+  - Fasting: two rows You / @partner.
+- `WeekCircles` already has `readOnly` prop — use it for partner rows.
 
-All with RLS: owner-only `auth.uid() = user_id` for select/insert/update/delete.
-
-**Trackers**
-- Prayer: 5 `WeekCircles` rows.
-- Quran: shows `current_page`, big `+1` button.
-- Athkar: morning row + evening row of `WeekCircles`; below, a dhikr counter with three preset chips (SubhanAllah / Alhamdulillah / Allahu Akbar) each showing count + `+1` tap.
-- Fasting: single `WeekCircles` row.
-
-**Calendar log**: a "View past weeks" link opens a Dialog showing previous `week_start` rows for each tracker as small grids.
-
-**Worship removal**: drop the Worship UI from `/private`. Keep the `worship_logs` table (data preservation) but stop reading/writing.
-
-## 6. Private page — only Journal / Unsent / Goals
-
-- Strip Mood, Vault, Sealed Letter, Building, Reflect sections + their reads/writes from `/private`.
-- Render a 3-card grid (1 row × 3 on tablet+, stacked on small mobile) with icons (BookOpen / MessageSquareOff / Target) and labels.
-- Tapping a card expands inline to that section's editor + log (using shadcn `Accordion` or simple `useState` toggle). Only one open at a time.
-
-## 7. Today page — 16-option grid + 6h cooldown + push notify
-
-- Replace `STATUS_OPTIONS` in `src/lib/statuses.ts` with the full 16 listed. Update DB enum `status_type` (current values + new ones) via migration: `ALTER TYPE status_type ADD VALUE IF NOT EXISTS 'peace';` etc.
-- 2-column × 8-row grid. Each card: icon + text, compact (`p-3 text-sm`). Selecting sets local state only; visible "Confirm" button submits.
-- Update DB cooldown trigger `enforce_status_cooldown` from 12h → 6h via migration.
-- After successful insert, call a server function `notifyPartnerUpdate({ message: "@username sent you an update 🤍" })` that looks up partner's `push_subscriptions` rows and sends Web Push via `web-push` (server-side). If `web-push` can't run in the Worker, fall back to writing a row in a new `pending_pushes` table that the SW reads on `sync` — but first attempt is direct.
-- UI: if cooldown not elapsed, show a soft "next update in 4h 12m" line under the grid and disable Confirm.
-
-## 8. Thinking of you — 3h cooldown + visible timer
-
-- Change `MIN_PING_GAP_MS` to 3 hours.
-- After tap, render small muted text "available again in 2h 47m", updating every minute via interval.
-
-## 9. Unlock page — proper selection UI
-
-- Rebuild `/unlock` (or wherever the unlock form lives) with three cards: Journal / Unsent / Goals.
-- Each card has a top-level Switch (master on/off → flips `unlock_prefs.share_journal` etc.).
-- Granular: each card expandable; lists the user's own entries with per-entry checkboxes.
-- For per-entry sharing, add `is_shared boolean default false` to `journal_entries`, `unsent_thoughts`, `goals`. RLS for partner select tightened to `... AND is_shared = true` in addition to existing `partner_shares(...)` flag.
-- Save button persists both the master switches and per-entry flags in one transaction (best-effort sequential since supabase-js doesn't expose tx, with optimistic UI + rollback toast on error).
-- Partner-side queries already filtered by RLS so no client-side change required beyond the new column behavior.
-
-## 10. Allow-delete toggle fix
-
-- Root cause: delete buttons are likely conditional on a stale local state instead of `journey.allow_private_deletes`.
-- Pass `allowDeletes = journey.allow_private_deletes` from `AppShell`/session into Journal, Unsent, Goals. Render delete button on every row when true, regardless of `created_at`. Hide all when false.
-- Toggle in Settings updates the journey row + invalidates session; `useSession` re-fetch propagates to all three sections.
+**Week range fix**
+- Confirm `weekStartSaturday()` correctness for current Saturday rollover (already handled by `(getDay()+1)%7`); ensure each `TrackerCard` only renders the label once (current code already does — verify no inner trackers also print it).
 
 ## Migrations summary (single file)
 
-- `ALTER TYPE status_type ADD VALUE` for each new status (8 new).
-- Update `enforce_status_cooldown` function: `INTERVAL '6 hours'`.
-- `ALTER TABLE unsent_thoughts ADD COLUMN image_path text;` and update `kind` checks if any.
-- `ALTER TABLE journal_entries ADD COLUMN is_shared boolean DEFAULT false;`
-- `ALTER TABLE unsent_thoughts ADD COLUMN is_shared boolean DEFAULT false;`
-- `ALTER TABLE goals ADD COLUMN is_shared boolean DEFAULT false;`
-- Update partner-share RLS policies on those three tables to also require `is_shared = true`.
-- Create Deen tables (`deen_prayers`, `deen_quran`, `deen_quran_log`, `deen_athkar`, `deen_dhikr`, `deen_fasting`) with RLS.
-- Create `unsent-images` storage bucket + RLS policies.
-- (Optional) `pending_pushes` table only if web-push direct send isn't viable.
+```sql
+-- Counter timestamps + pause state
+ALTER TABLE journeys
+  ADD COLUMN IF NOT EXISTS nc_start_at timestamptz,
+  ADD COLUMN IF NOT EXISTS is_paused boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS paused_at timestamptz,
+  ADD COLUMN IF NOT EXISTS paused_total_seconds bigint NOT NULL DEFAULT 0;
+UPDATE journeys SET nc_start_at = (nc_start_date::timestamp) AT TIME ZONE 'UTC' WHERE nc_start_at IS NULL;
 
-## Files touched
+-- Break log: pause/resume events
+ALTER TABLE nc_breaks
+  ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'reset',
+  ALTER COLUMN broken_by DROP NOT NULL;
 
-**New**
-- `src/routes/deen.tsx`
-- `src/components/WeekCircles.tsx`
-- `src/components/MediaOverlay.tsx` (audio + image overlays)
-- `src/components/UnlockSelector.tsx` (or rebuild existing unlock route)
-- `public/icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` (if missing)
+-- Deen: partner read access
+CREATE POLICY "partner read deen_prayers" ON deen_prayers FOR SELECT TO authenticated
+  USING (user_id = partner_user_id());
+-- (same for deen_quran, deen_quran_log, deen_athkar, deen_dhikr, deen_fasting)
+```
+
+## Files
 
 **Edited**
-- `public/sw.js`, `public/manifest.webmanifest`
-- `src/routes/__root.tsx` (meta + guarded SW registration)
-- `src/lib/notifications.ts`, `src/lib/offline-queue.ts`
-- `src/lib/statuses.ts` (16 options)
-- `src/components/AppShell.tsx` (sidebar rename Dua→Deen, allow-delete plumbing, init offline queue, post-login notification permission)
-- `src/components/PartnerActivity.tsx` (already smart-polled)
-- `src/routes/today.tsx` (new top counters layout, 16-option grid, confirm, cooldown timer, side-by-side updates, subtle reset icon, hours in counter)
-- `src/routes/private.tsx` (strip to 3 sections, 3-card grid, allow-delete wiring, image inputs in Unsent, minimal media log + overlays)
-- `src/routes/unlock.tsx` (rebuilt selector)
-- `src/server/journey.functions.ts` (notifyPartnerUpdate)
-- `src/integrations/supabase/types.ts` regenerates after migration
+- `src/lib/statuses.ts` — `daysAndHoursBetween` accepts ISO date or timestamp and an optional offset-ms.
+- `src/server/journey.functions.ts` — `pauseCounter`, `resumeCounter`; `resetCounter` writes `nc_start_at`.
+- `src/routes/today.tsx` — pause/resume/break-log icons in NC card, paused-state rendering, partner update card replacing PartnerActivity, remove inline break log.
+- `src/routes/deen.tsx` — partner queries + side-by-side rendering in each tracker.
+- `src/lib/session.ts` — extend `Journey` type with `nc_start_at`, `is_paused`, `paused_at`, `paused_total_seconds`.
 
-**Removed**
-- `src/routes/dua.tsx` (replaced by `deen.tsx`)
-- Worship/Mood/Vault/Letter/Building/Reflect blocks inside `/private`
+**New**
+- `supabase/migrations/<timestamp>_nc_pause_and_deen_share.sql`
 
-## Open question before I start
-
-One thing genuinely needs your call: **per-entry unlock granularity in #9** adds an `is_shared` column to journal/unsent/goals and a checklist UI per entry. That's meaningfully more work and UI than master toggles only. If you're fine with master toggles per section (Journal on/off, Unsent on/off, Goals on/off) and skipping per-entry checkboxes, the unlock page is much simpler and ships faster. I'll default to **master-toggle-only** unless you say otherwise — granular per-entry is a follow-up.
+No changes to auth, AppShell, or PWA layer.
 
