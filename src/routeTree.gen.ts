@@ -19,6 +19,8 @@ import { Route as PrivateRouteImport } from './routes/private'
 import { Route as DeenRouteImport } from './routes/deen'
 import { Route as CounterRouteImport } from './routes/counter'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as UsStudyingRouteImport } from './routes/us.studying'
+import { Route as UsHabitsRouteImport } from './routes/us.habits'
 import { Route as UsGalleryRouteImport } from './routes/us.gallery'
 
 const UsRoute = UsRouteImport.update({
@@ -71,6 +73,16 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UsStudyingRoute = UsStudyingRouteImport.update({
+  id: '/studying',
+  path: '/studying',
+  getParentRoute: () => UsRoute,
+} as any)
+const UsHabitsRoute = UsHabitsRouteImport.update({
+  id: '/habits',
+  path: '/habits',
+  getParentRoute: () => UsRoute,
+} as any)
 const UsGalleryRoute = UsGalleryRouteImport.update({
   id: '/gallery',
   path: '/gallery',
@@ -89,6 +101,8 @@ export interface FileRoutesByFullPath {
   '/unlock': typeof UnlockRoute
   '/us': typeof UsRouteWithChildren
   '/us/gallery': typeof UsGalleryRoute
+  '/us/habits': typeof UsHabitsRoute
+  '/us/studying': typeof UsStudyingRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -102,6 +116,8 @@ export interface FileRoutesByTo {
   '/unlock': typeof UnlockRoute
   '/us': typeof UsRouteWithChildren
   '/us/gallery': typeof UsGalleryRoute
+  '/us/habits': typeof UsHabitsRoute
+  '/us/studying': typeof UsStudyingRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -116,6 +132,8 @@ export interface FileRoutesById {
   '/unlock': typeof UnlockRoute
   '/us': typeof UsRouteWithChildren
   '/us/gallery': typeof UsGalleryRoute
+  '/us/habits': typeof UsHabitsRoute
+  '/us/studying': typeof UsStudyingRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -131,6 +149,8 @@ export interface FileRouteTypes {
     | '/unlock'
     | '/us'
     | '/us/gallery'
+    | '/us/habits'
+    | '/us/studying'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -144,6 +164,8 @@ export interface FileRouteTypes {
     | '/unlock'
     | '/us'
     | '/us/gallery'
+    | '/us/habits'
+    | '/us/studying'
   id:
     | '__root__'
     | '/'
@@ -157,6 +179,8 @@ export interface FileRouteTypes {
     | '/unlock'
     | '/us'
     | '/us/gallery'
+    | '/us/habits'
+    | '/us/studying'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -244,6 +268,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/us/studying': {
+      id: '/us/studying'
+      path: '/studying'
+      fullPath: '/us/studying'
+      preLoaderRoute: typeof UsStudyingRouteImport
+      parentRoute: typeof UsRoute
+    }
+    '/us/habits': {
+      id: '/us/habits'
+      path: '/habits'
+      fullPath: '/us/habits'
+      preLoaderRoute: typeof UsHabitsRouteImport
+      parentRoute: typeof UsRoute
+    }
     '/us/gallery': {
       id: '/us/gallery'
       path: '/gallery'
@@ -256,10 +294,14 @@ declare module '@tanstack/react-router' {
 
 interface UsRouteChildren {
   UsGalleryRoute: typeof UsGalleryRoute
+  UsHabitsRoute: typeof UsHabitsRoute
+  UsStudyingRoute: typeof UsStudyingRoute
 }
 
 const UsRouteChildren: UsRouteChildren = {
   UsGalleryRoute: UsGalleryRoute,
+  UsHabitsRoute: UsHabitsRoute,
+  UsStudyingRoute: UsStudyingRoute,
 }
 
 const UsRouteWithChildren = UsRoute._addFileChildren(UsRouteChildren)
@@ -279,3 +321,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
