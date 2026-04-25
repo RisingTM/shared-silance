@@ -98,12 +98,14 @@ export const replaceSyllabus = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin
       .from("us_syllabus")
       .upsert(
-        {
-          journey_id: profile.journey_id,
-          content: data.modules as unknown as object,
-          imported_by: context.userId,
-          imported_at: new Date().toISOString(),
-        },
+        [
+          {
+            journey_id: profile.journey_id,
+            content: data.modules as unknown as object,
+            imported_by: context.userId,
+            imported_at: new Date().toISOString(),
+          },
+        ],
         { onConflict: "journey_id" },
       );
     if (error) throw new Error(error.message);
