@@ -220,7 +220,7 @@ function Gallery() {
 }
 
 function UploadButton({ fileRef, onPick, label = "Upload photos" }: {
-  fileRef: React.RefObject<HTMLInputElement>; onPick: (f: FileList | null) => void; label?: string;
+  fileRef: React.RefObject<HTMLInputElement | null>; onPick: (f: FileList | null) => void; label?: string;
 }) {
   return (
     <div>
