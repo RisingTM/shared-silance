@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { VAPID_PUBLIC_KEY, urlBase64ToUint8Array } from "@/lib/vapid";
 
 function supported() {
   return typeof window !== "undefined" && "Notification" in window;
@@ -40,12 +41,27 @@ export async function registerPushSubscription(userId: string) {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
   try {
     const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.getSubscription();
-    if (!sub) return;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource,
+      });
+    }
     const json = sub.toJSON();
+    const endpoint = json.endpoint ?? "";
+    if (!endpoint) return;
+    // Avoid duplicate inserts
+    const { data: existing } = await supabase
+      .from("push_subscriptions")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("endpoint", endpoint)
+      .maybeSingle();
+    if (existing) return;
     await supabase.from("push_subscriptions").insert({
       user_id: userId,
-      endpoint: json.endpoint ?? "",
+      endpoint,
       p256dh: json.keys?.p256dh ?? "",
       auth: json.keys?.auth ?? "",
     });
