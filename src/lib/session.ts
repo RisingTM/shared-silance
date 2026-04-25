@@ -20,13 +20,9 @@ export type Profile = {
 export type Journey = {
   id: string;
   nc_start_date: string;
-  nc_start_at?: string | null;
   has_been_reset: boolean;
   talking_since?: string | null;
   allow_private_deletes?: boolean;
-  is_paused?: boolean;
-  paused_at?: string | null;
-  paused_total_seconds?: number | null;
 };
 
 export type Session = {

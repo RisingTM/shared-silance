@@ -34,32 +34,11 @@ export function daysBetween(startISO: string): number {
   return Math.max(0, Math.floor((todayUTC - start.getTime()) / 86400000));
 }
 
-// Days + hours from raw elapsed milliseconds.
-export function daysAndHoursFromMs(ms: number): { days: number; hours: number } {
-  const safe = Math.max(0, ms);
-  const days = Math.floor(safe / 86400000);
-  const hours = Math.floor((safe % 86400000) / 3600000);
-  return { days, hours };
-}
-
-// Days + hours since the given date or full ISO timestamp.
-// Accepts "YYYY-MM-DD" (treated as local midnight) or a full ISO timestamp.
+// Days + hours since the given date (treated as local midnight).
 export function daysAndHoursBetween(startISO: string): { days: number; hours: number } {
-  const iso = /^\d{4}-\d{2}-\d{2}$/.test(startISO) ? startISO + "T00:00:00" : startISO;
-  const start = new Date(iso).getTime();
-  return daysAndHoursFromMs(Date.now() - start);
-}
-
-// Effective elapsed ms for the NC counter, accounting for pauses.
-export function ncElapsedMs(opts: {
-  startAt: string; // ISO timestamp or YYYY-MM-DD
-  isPaused?: boolean;
-  pausedAt?: string | null;
-  pausedTotalSeconds?: number | null;
-}): number {
-  const iso = /^\d{4}-\d{2}-\d{2}$/.test(opts.startAt) ? opts.startAt + "T00:00:00" : opts.startAt;
-  const base = new Date(iso).getTime();
-  const endpoint = opts.isPaused && opts.pausedAt ? new Date(opts.pausedAt).getTime() : Date.now();
-  const pausedMs = (opts.pausedTotalSeconds ?? 0) * 1000;
-  return Math.max(0, endpoint - base - pausedMs);
+  const start = new Date(startISO + "T00:00:00").getTime();
+  const ms = Math.max(0, Date.now() - start);
+  const days = Math.floor(ms / 86400000);
+  const hours = Math.floor((ms % 86400000) / 3600000);
+  return { days, hours };
 }

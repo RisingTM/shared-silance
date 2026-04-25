@@ -1,19 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useSession } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  MILESTONES,
-  STATUS_OPTIONS,
-  daysAndHoursFromMs,
-  daysBetween,
-  ncElapsedMs,
-  statusMeta,
-  type StatusKey,
-} from "@/lib/statuses";
-import { resetCounter, pauseCounter, resumeCounter } from "@/server/journey.functions";
+import { MILESTONES, STATUS_OPTIONS, daysAndHoursBetween, daysBetween, statusMeta, type StatusKey } from "@/lib/statuses";
+import { resetCounter } from "@/server/journey.functions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -21,9 +13,10 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { History, Heart, RefreshCw, Pause, Play, ScrollText } from "lucide-react";
+import { History, Heart, RefreshCw } from "lucide-react";
 import { insertWithOfflineQueue } from "@/lib/data-client";
 import { notify } from "@/lib/notifications";
+import { PartnerActivity } from "@/components/PartnerActivity";
 import { daysUntilNextBirthday } from "@/lib/birthday";
 
 export const Route = createFileRoute("/today")({
@@ -37,7 +30,7 @@ export const Route = createFileRoute("/today")({
 });
 
 type Row = { id: string; user_id: string; status: string; created_at: string };
-type Break = { id: string; broken_by: "him" | "her" | null; note: string | null; created_at: string; kind?: string | null };
+type Break = { id: string; broken_by: "him" | "her"; note: string | null; created_at: string };
 
 const PING_COOLDOWN_MS = 3 * 60 * 60 * 1000; // 3 hours
 const STATUS_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -57,10 +50,7 @@ function TodayPage() {
   const [breaks, setBreaks] = useState<Break[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
-  const [pauseOpen, setPauseOpen] = useState(false);
-  const [logOpen, setLogOpen] = useState(false);
   const [busyReset, setBusyReset] = useState(false);
-  const [busyPause, setBusyPause] = useState(false);
   const [who, setWho] = useState<"him" | "her">("him");
   const [note, setNote] = useState("");
   const [pingExpiresAt, setPingExpiresAt] = useState<number>(0);
@@ -98,28 +88,10 @@ function TodayPage() {
     setPingExpiresAt(Number(raw) + PING_COOLDOWN_MS);
   }, [profile]);
 
-  // 1-min tick to update countdown labels and the live hours
+  // 1-min tick to update countdown labels
   useEffect(() => {
     const id = window.setInterval(() => setTick((t) => t + 1), 60_000);
     return () => window.clearInterval(id);
-  }, []);
-
-  // Refresh journey state when the tab regains focus (so partner sees pause/resume)
-  useEffect(() => {
-    const onFocus = () => {
-      refresh().catch(() => undefined);
-      load().catch(() => undefined);
-    };
-    const onVis = () => {
-      if (document.visibilityState === "visible") onFocus();
-    };
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVis);
-    };
-    /* eslint-disable-next-line */
   }, []);
 
   useEffect(() => {
@@ -174,6 +146,7 @@ function TodayPage() {
     }
     setPendingStatus(null);
     toast.success("Update shared");
+    // Best-effort partner push notification
     if (partnerProfile?.id && profile.username) {
       try {
         const { notifyPartnerUpdate } = await import("@/server/journey.functions");
@@ -187,18 +160,7 @@ function TodayPage() {
     load();
   };
 
-  // ---- NC counter: hours + pause aware ----
-  const elapsed = journey
-    ? ncElapsedMs({
-        startAt: journey.nc_start_at ?? journey.nc_start_date,
-        isPaused: !!journey.is_paused,
-        pausedAt: journey.paused_at,
-        pausedTotalSeconds: journey.paused_total_seconds ?? 0,
-      })
-    : 0;
-  const noContact = daysAndHoursFromMs(elapsed);
-  const isPaused = !!journey?.is_paused;
-
+  const noContact = journey ? daysAndHoursBetween(journey.nc_start_date) : { days: 0, hours: 0 };
   const talkingDays = journey?.talking_since ? daysBetween(journey.talking_since) : 0;
   const counterLabel = profile?.counter_label?.trim() || "Days of no contact";
 
@@ -231,29 +193,6 @@ function TodayPage() {
     }
   };
 
-  const submitPauseToggle = async () => {
-    setBusyPause(true);
-    try {
-      if (isPaused) {
-        await resumeCounter();
-        toast.success("Counter resumed.");
-      } else {
-        await pauseCounter();
-        toast.success("Counter paused.");
-      }
-      setPauseOpen(false);
-      await refresh();
-      await load();
-    } catch (e: any) {
-      toast.error(e.message ?? "Could not update pause state");
-    } finally {
-      setBusyPause(false);
-    }
-  };
-
-  // Partner update freshness window (6h)
-  const theirsFresh = theirs ? Date.now() - new Date(theirs.created_at).getTime() < STATUS_COOLDOWN_MS : false;
-
   return (
     <div className="space-y-6">
       <div className="text-center">
@@ -261,73 +200,47 @@ function TodayPage() {
         <p className="text-muted-foreground italic mt-1">Your journey at a glance.</p>
       </div>
 
-      {/* NC counter card */}
+      {/* Top counters: NC full-width, then talking + birthday side by side */}
       <div className="parchment-card rounded-2xl p-6 text-center space-y-3 relative">
-        {/* Subtle action icons (top-right) */}
-        <div className="absolute top-3 right-3 flex items-center gap-1">
-          <button
-            aria-label="View break log"
-            onClick={() => setLogOpen(true)}
-            className="size-8 rounded-full text-muted-foreground/60 hover:text-muted-foreground hover:bg-accent/40 inline-flex items-center justify-center transition-colors"
-          >
-            <ScrollText className="size-4" />
-          </button>
-          <button
-            aria-label={isPaused ? "Resume counter" : "Pause counter"}
-            onClick={() => setPauseOpen(true)}
-            className="size-8 rounded-full text-muted-foreground/60 hover:text-muted-foreground hover:bg-accent/40 inline-flex items-center justify-center transition-colors"
-          >
-            {isPaused ? <Play className="size-4" /> : <Pause className="size-4" />}
-          </button>
-          <Dialog open={resetOpen} onOpenChange={setResetOpen}>
-            <DialogTrigger asChild>
-              <button
-                aria-label="Reset counter"
-                className="size-8 rounded-full text-muted-foreground/60 hover:text-muted-foreground hover:bg-accent/40 inline-flex items-center justify-center transition-colors"
-              >
-                <RefreshCw className="size-4" />
-              </button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle className="font-display tracking-widest">RESET COUNTER</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label className="font-display text-xs uppercase tracking-widest">Who broke it?</Label>
-                  <RadioGroup value={who} onValueChange={(v) => setWho(v as "him" | "her")} className="mt-2 flex gap-6">
-                    <label className="flex items-center gap-2"><RadioGroupItem value="him" /> Him</label>
-                    <label className="flex items-center gap-2"><RadioGroupItem value="her" /> Her</label>
-                  </RadioGroup>
-                </div>
-                <div>
-                  <Label className="font-display text-xs uppercase tracking-widest">What happened (optional)</Label>
-                  <Textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={3} />
-                </div>
+        <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+          <DialogTrigger asChild>
+            <button
+              aria-label="Reset counter"
+              className="absolute top-3 right-3 size-8 rounded-full text-muted-foreground/60 hover:text-muted-foreground hover:bg-accent/40 inline-flex items-center justify-center transition-colors"
+            >
+              <RefreshCw className="size-4" />
+            </button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="font-display tracking-widest">RESET COUNTER</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label className="font-display text-xs uppercase tracking-widest">Who broke it?</Label>
+                <RadioGroup value={who} onValueChange={(v) => setWho(v as "him" | "her")} className="mt-2 flex gap-6">
+                  <label className="flex items-center gap-2"><RadioGroupItem value="him" /> Him</label>
+                  <label className="flex items-center gap-2"><RadioGroupItem value="her" /> Her</label>
+                </RadioGroup>
               </div>
-              <DialogFooter>
-                <Button variant="ghost" onClick={() => setResetOpen(false)}>Cancel</Button>
-                <Button onClick={submitReset} disabled={busyReset}>{busyReset ? "Resetting…" : "Confirm reset"}</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-
+              <div>
+                <Label className="font-display text-xs uppercase tracking-widest">What happened (optional)</Label>
+                <Textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={3} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setResetOpen(false)}>Cancel</Button>
+              <Button onClick={submitReset} disabled={busyReset}>{busyReset ? "Resetting…" : "Confirm reset"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <p className="font-display text-xs uppercase tracking-[0.35em] text-muted-foreground">{counterLabel}</p>
         <div className="font-display text-5xl sm:text-6xl text-primary tabular-nums">
           {noContact.days}
-          {isPaused ? (
-            <span className="ml-2 align-middle inline-block text-xs uppercase tracking-[0.3em] rounded-full border border-border bg-muted/40 text-muted-foreground px-3 py-1">
-              paused
-            </span>
-          ) : (
-            <span className="text-2xl sm:text-3xl text-primary/70"> days, {noContact.hours}h</span>
-          )}
+          <span className="text-2xl sm:text-3xl text-primary/70"> days, {noContact.hours}h</span>
         </div>
         <p className="text-xs text-muted-foreground">
-          Since {journey
-            ? new Date(journey.nc_start_at ?? journey.nc_start_date + "T00:00").toLocaleDateString()
-            : "—"}
+          Since {journey ? new Date(journey.nc_start_date + "T00:00").toLocaleDateString() : "—"}
         </p>
         <div className="flex flex-wrap justify-center gap-2">
           {MILESTONES.map((m) => (
@@ -346,78 +259,6 @@ function TodayPage() {
         </div>
       </div>
 
-      {/* Pause/Resume confirm dialog */}
-      <Dialog open={pauseOpen} onOpenChange={setPauseOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="font-display tracking-widest">
-              {isPaused ? "RESUME COUNTER" : "PAUSE COUNTER"}
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {isPaused
-              ? "Resume counting from where it stopped?"
-              : "Are you sure you want to pause? This means you are in contact right now."}
-          </p>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setPauseOpen(false)}>Cancel</Button>
-            <Button onClick={submitPauseToggle} disabled={busyPause}>
-              {busyPause ? "Saving…" : isPaused ? "Resume" : "Pause"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Break log dialog */}
-      <Dialog open={logOpen} onOpenChange={setLogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-display tracking-widest">BREAK LOG</DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="h-96 pr-4">
-            {breaks.length === 0 ? (
-              <p className="text-sm italic text-muted-foreground text-center py-8">No entries yet.</p>
-            ) : (
-              <ul className="space-y-3">
-                {breaks.map((b, idx) => {
-                  const kind = (b.kind ?? "reset") as "reset" | "pause" | "resume";
-                  // duration of pause = time between this resume and the previous (older) pause for the same journey
-                  let pauseDuration: string | null = null;
-                  if (kind === "resume") {
-                    const earlierPause = breaks
-                      .slice(idx + 1)
-                      .find((x) => (x.kind ?? "reset") === "pause");
-                    if (earlierPause) {
-                      const ms = new Date(b.created_at).getTime() - new Date(earlierPause.created_at).getTime();
-                      pauseDuration = formatRemaining(Math.max(0, ms));
-                    }
-                  }
-                  const labelMap = { reset: "RESET", pause: "PAUSED", resume: "RESUMED" } as const;
-                  return (
-                    <li key={b.id} className="border-b border-border/40 pb-3 last:border-0">
-                      <div className="flex justify-between items-baseline gap-2">
-                        <span className="font-display text-sm tracking-widest">
-                          {labelMap[kind]}
-                          {kind === "reset" && b.broken_by ? ` · ${b.broken_by === "him" ? "HIM" : "HER"}` : ""}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(b.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                      {pauseDuration && (
-                        <p className="text-xs text-muted-foreground mt-1">Paused for {pauseDuration}</p>
-                      )}
-                      {b.note && <p className="text-sm text-muted-foreground mt-1 italic">"{b.note}"</p>}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
-
-      {/* Talking + Birthday */}
       <div className="grid grid-cols-2 gap-3">
         <div className="parchment-card rounded-2xl p-4 text-center">
           <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">Days talking</p>
@@ -443,22 +284,20 @@ function TodayPage() {
         </div>
       </div>
 
-      {/* Side-by-side updates */}
+      {/* Side-by-side updates: yours (full content) | partner presence */}
       <div className="grid grid-cols-2 gap-3">
-        <UpdateCard
-          label="You"
-          name={profile?.display_name ?? profile?.username ?? "You"}
-          row={mine}
-          fresh={!!mine && Date.now() - new Date(mine.created_at).getTime() < STATUS_COOLDOWN_MS}
-          waitingText="Not yet today"
-        />
-        <UpdateCard
-          label={`@${partnerProfile?.username ?? "partner"}`}
-          name={partnerProfile?.display_name ?? partnerProfile?.username ?? "Them"}
-          row={theirsFresh ? theirs : null}
-          fresh={theirsFresh}
-          waitingText={`waiting for @${partnerProfile?.username ?? "partner"}…`}
-        />
+        <YourUpdateCard row={mine} name={profile?.display_name ?? "You"} />
+        <div className="parchment-card rounded-2xl p-4 flex flex-col items-center justify-center text-center min-h-[140px]">
+          <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground mb-2">
+            @{partnerProfile?.username ?? "partner"}
+          </p>
+          <PartnerActivity partnerId={partnerProfile?.id} partnerUsername={partnerProfile?.username} />
+          {theirs && (
+            <p className="text-[10px] text-muted-foreground mt-2">
+              {new Date(theirs.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* 16-option update grid */}
@@ -498,6 +337,24 @@ function TodayPage() {
         </Button>
       </div>
 
+      {(journey?.has_been_reset || breaks.length > 0) && (
+        <div className="parchment-card rounded-2xl p-5">
+          <h3 className="font-display text-sm uppercase tracking-widest text-muted-foreground mb-3">Break log</h3>
+          {breaks.length === 0 && <p className="text-sm italic text-muted-foreground">No breaks recorded.</p>}
+          <ul className="space-y-3">
+            {breaks.map((b) => (
+              <li key={b.id} className="border-b border-border/40 pb-3 last:border-0">
+                <div className="flex justify-between items-baseline">
+                  <span className="font-display text-sm tracking-widest">{b.broken_by === "him" ? "HIM" : "HER"}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(b.created_at).toLocaleDateString()}</span>
+                </div>
+                {b.note && <p className="text-sm text-muted-foreground mt-1 italic">"{b.note}"</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <Dialog>
         <DialogTrigger asChild>
           <Button variant="outline" className="w-full"><History className="size-4" /> View history</Button>
@@ -525,40 +382,18 @@ function TodayPage() {
   );
 }
 
-function UpdateCard({
-  label,
-  name,
-  row,
-  fresh,
-  waitingText,
-}: {
-  label: string;
-  name: string;
-  row: Row | null;
-  fresh: boolean;
-  waitingText: string;
-}) {
+function YourUpdateCard({ row, name }: { row: Row | null; name: string }) {
   const m = row ? statusMeta(row.status) : null;
   return (
     <div className="parchment-card rounded-2xl p-4 text-center min-h-[140px] flex flex-col items-center justify-center">
-      <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">{label}</p>
-      <p className="font-display text-xs mt-1 truncate max-w-full">{name}</p>
-      {row && m ? (
-        <>
-          <div className="my-2 text-3xl">{m.emoji}</div>
-          <p className="text-xs leading-tight">{m.label}</p>
-          <p className="text-[10px] text-muted-foreground mt-1">
-            {new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          </p>
-        </>
-      ) : (
-        <>
-          <div className="my-2 text-3xl text-muted-foreground/50">·</div>
-          <p className="text-xs leading-tight italic text-muted-foreground">{waitingText}</p>
-        </>
-      )}
-      {!fresh && row && (
-        <p className="text-[10px] text-muted-foreground/70 mt-1 italic">over 6h ago</p>
+      <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">You</p>
+      <p className="font-display text-xs mt-1">{name}</p>
+      <div className="my-2 text-3xl">{m?.emoji ?? "·"}</div>
+      <p className="text-xs leading-tight">{m?.label ?? "Not yet today"}</p>
+      {row && (
+        <p className="text-[10px] text-muted-foreground mt-1">
+          {new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        </p>
       )}
     </div>
   );

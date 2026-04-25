@@ -300,11 +300,7 @@ export type Database = {
           created_at: string
           has_been_reset: boolean
           id: string
-          is_paused: boolean
-          nc_start_at: string | null
           nc_start_date: string
-          paused_at: string | null
-          paused_total_seconds: number
           talking_since: string | null
         }
         Insert: {
@@ -312,11 +308,7 @@ export type Database = {
           created_at?: string
           has_been_reset?: boolean
           id?: string
-          is_paused?: boolean
-          nc_start_at?: string | null
           nc_start_date?: string
-          paused_at?: string | null
-          paused_total_seconds?: number
           talking_since?: string | null
         }
         Update: {
@@ -324,11 +316,7 @@ export type Database = {
           created_at?: string
           has_been_reset?: boolean
           id?: string
-          is_paused?: boolean
-          nc_start_at?: string | null
           nc_start_date?: string
-          paused_at?: string | null
-          paused_total_seconds?: number
           talking_since?: string | null
         }
         Relationships: []
@@ -386,27 +374,24 @@ export type Database = {
       }
       nc_breaks: {
         Row: {
-          broken_by: Database["public"]["Enums"]["broken_by"] | null
+          broken_by: Database["public"]["Enums"]["broken_by"]
           created_at: string
           id: string
           journey_id: string
-          kind: string
           note: string | null
         }
         Insert: {
-          broken_by?: Database["public"]["Enums"]["broken_by"] | null
+          broken_by: Database["public"]["Enums"]["broken_by"]
           created_at?: string
           id?: string
           journey_id: string
-          kind?: string
           note?: string | null
         }
         Update: {
-          broken_by?: Database["public"]["Enums"]["broken_by"] | null
+          broken_by?: Database["public"]["Enums"]["broken_by"]
           created_at?: string
           id?: string
           journey_id?: string
-          kind?: string
           note?: string | null
         }
         Relationships: [
