@@ -7,13 +7,19 @@ export function WeekCircles({
   onToggle,
   size = "md",
   readOnly = false,
+  tone = "gold",
 }: {
   days: boolean[];
   onToggle?: (index: number, next: boolean) => void;
   size?: "sm" | "md";
   readOnly?: boolean;
+  tone?: "gold" | "muted";
 }) {
   const dim = size === "sm" ? "size-7 text-[10px]" : "size-9 text-xs";
+  const onClass =
+    tone === "muted"
+      ? "bg-amber-200/30 dark:bg-amber-900/30 text-foreground/70 border-amber-200/40 dark:border-amber-900/40"
+      : "bg-primary/80 text-primary-foreground border-primary";
   return (
     <div className="flex justify-between gap-1">
       {DAY_LABELS.map((d, i) => {
@@ -28,10 +34,8 @@ export function WeekCircles({
             className={[
               "rounded-full border font-display tracking-wider flex items-center justify-center transition-colors",
               dim,
-              on
-                ? "bg-primary/80 text-primary-foreground border-primary"
-                : "bg-muted/40 text-muted-foreground border-border hover:bg-accent/40",
-              readOnly && "cursor-default opacity-80",
+              on ? onClass : "bg-muted/40 text-muted-foreground border-border hover:bg-accent/40",
+              readOnly && "cursor-default opacity-90",
             ]
               .filter(Boolean)
               .join(" ")}
@@ -48,8 +52,7 @@ export function WeekCircles({
 // week containing `d`.
 export function weekStartSaturday(d: Date = new Date()): string {
   const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  // JS getDay: Sun=0, Mon=1, ..., Sat=6. We want days back to most recent Saturday.
-  const offset = (local.getDay() + 1) % 7; // Sat -> 0, Sun -> 1, ..., Fri -> 6
+  const offset = (local.getDay() + 1) % 7;
   local.setDate(local.getDate() - offset);
   const yyyy = local.getFullYear();
   const mm = String(local.getMonth() + 1).padStart(2, "0");
