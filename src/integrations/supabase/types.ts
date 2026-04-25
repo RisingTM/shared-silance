@@ -306,7 +306,6 @@ export type Database = {
           paused_at: string | null
           paused_total_seconds: number
           talking_since: string | null
-          us_password_hash: string | null
         }
         Insert: {
           allow_private_deletes?: boolean
@@ -319,7 +318,6 @@ export type Database = {
           paused_at?: string | null
           paused_total_seconds?: number
           talking_since?: string | null
-          us_password_hash?: string | null
         }
         Update: {
           allow_private_deletes?: boolean
@@ -332,7 +330,6 @@ export type Database = {
           paused_at?: string | null
           paused_total_seconds?: number
           talking_since?: string | null
-          us_password_hash?: string | null
         }
         Relationships: []
       }
@@ -734,225 +731,6 @@ export type Database = {
         }
         Relationships: []
       }
-      us_albums: {
-        Row: {
-          created_at: string
-          id: string
-          is_shared: boolean
-          journey_id: string
-          name: string
-          owner_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_shared?: boolean
-          journey_id: string
-          name: string
-          owner_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_shared?: boolean
-          journey_id?: string
-          name?: string
-          owner_id?: string
-        }
-        Relationships: []
-      }
-      us_habit_logs: {
-        Row: {
-          days: boolean[]
-          habit_id: string
-          id: string
-          updated_at: string
-          user_id: string
-          week_start: string
-        }
-        Insert: {
-          days?: boolean[]
-          habit_id: string
-          id?: string
-          updated_at?: string
-          user_id: string
-          week_start: string
-        }
-        Update: {
-          days?: boolean[]
-          habit_id?: string
-          id?: string
-          updated_at?: string
-          user_id?: string
-          week_start?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "us_habit_logs_habit_id_fkey"
-            columns: ["habit_id"]
-            isOneToOne: false
-            referencedRelation: "us_habits"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      us_habit_sections: {
-        Row: {
-          created_at: string
-          id: string
-          journey_id: string
-          name: string
-          sort_order: number
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          journey_id: string
-          name: string
-          sort_order?: number
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          journey_id?: string
-          name?: string
-          sort_order?: number
-          user_id?: string
-        }
-        Relationships: []
-      }
-      us_habits: {
-        Row: {
-          created_at: string
-          id: string
-          journey_id: string
-          name: string
-          section_id: string | null
-          sort_order: number
-          user_id: string
-          visibility: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          journey_id: string
-          name: string
-          section_id?: string | null
-          sort_order?: number
-          user_id: string
-          visibility?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          journey_id?: string
-          name?: string
-          section_id?: string | null
-          sort_order?: number
-          user_id?: string
-          visibility?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "us_habits_section_id_fkey"
-            columns: ["section_id"]
-            isOneToOne: false
-            referencedRelation: "us_habit_sections"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      us_photos: {
-        Row: {
-          album_id: string | null
-          caption: string | null
-          created_at: string
-          id: string
-          journey_id: string
-          sort_order: number
-          storage_path: string
-          uploader_id: string
-        }
-        Insert: {
-          album_id?: string | null
-          caption?: string | null
-          created_at?: string
-          id?: string
-          journey_id: string
-          sort_order?: number
-          storage_path: string
-          uploader_id: string
-        }
-        Update: {
-          album_id?: string | null
-          caption?: string | null
-          created_at?: string
-          id?: string
-          journey_id?: string
-          sort_order?: number
-          storage_path?: string
-          uploader_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "us_photos_album_id_fkey"
-            columns: ["album_id"]
-            isOneToOne: false
-            referencedRelation: "us_albums"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      us_syllabus: {
-        Row: {
-          content: Json
-          imported_at: string
-          imported_by: string | null
-          journey_id: string
-        }
-        Insert: {
-          content?: Json
-          imported_at?: string
-          imported_by?: string | null
-          journey_id: string
-        }
-        Update: {
-          content?: Json
-          imported_at?: string
-          imported_by?: string | null
-          journey_id?: string
-        }
-        Relationships: []
-      }
-      us_syllabus_ratings: {
-        Row: {
-          id: string
-          item_key: string
-          journey_id: string
-          rating: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          id?: string
-          item_key: string
-          journey_id: string
-          rating?: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          id?: string
-          item_key?: string
-          journey_id?: string
-          rating?: number
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       weekly_reflections: {
         Row: {
           answer: string
@@ -1031,7 +809,6 @@ export type Database = {
     }
     Functions: {
       current_journey_id: { Args: never; Returns: string }
-      is_journey_owner: { Args: never; Returns: boolean }
       partner_shares: { Args: { section: string }; Returns: boolean }
       partner_user_id: { Args: never; Returns: string }
     }

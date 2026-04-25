@@ -174,17 +174,11 @@ function TodayPage() {
     }
     setPendingStatus(null);
     toast.success("Update shared");
-    if (partnerProfile?.id && profile.username && pendingStatus) {
+    if (partnerProfile?.id && profile.username) {
       try {
-        const meta = statusMeta(pendingStatus);
-        const { sendPushToPartner } = await import("@/server/push.functions");
-        await (sendPushToPartner as any)({
-          data: {
-            partnerId: partnerProfile.id,
-            title: `@${profile.username}`,
-            body: `${meta.emoji} ${meta.label}`,
-            url: "/today",
-          },
+        const { notifyPartnerUpdate } = await import("@/server/journey.functions");
+        await (notifyPartnerUpdate as any)({
+          data: { partnerId: partnerProfile.id, message: `@${profile.username} sent you an update 🤍` },
         });
       } catch {
         /* push is best-effort */
