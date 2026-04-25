@@ -33,6 +33,8 @@ const DHIKR_PRESETS = [
   { kind: "allahuakbar", label: "Allahu Akbar" },
 ] as const;
 
+const EMPTY_WEEK: boolean[] = [false, false, false, false, false, false, false];
+
 function DeenPage() {
   const { user } = useSession();
   const [offset, setOffset] = useState(0);
@@ -132,34 +134,42 @@ function TrackerCard({ title, children }: { title: string; children: React.React
 }
 
 function PrayerTracker() {
-  const { user } = useSession();
+  const { user, partnerProfile } = useSession();
   const ws = useMemo(() => weekStartSaturday(), []);
-  const [rows, setRows] = useState<Record<string, boolean[]>>({});
+  const [mine, setMine] = useState<Record<string, boolean[]>>({});
+  const [theirs, setTheirs] = useState<Record<string, boolean[]>>({});
 
   const load = async () => {
     if (!user) return;
+    const ids = [user.id, partnerProfile?.id].filter(Boolean) as string[];
     const { data } = await supabase
       .from("deen_prayers")
       .select("*")
-      .eq("user_id", user.id)
+      .in("user_id", ids)
       .eq("week_start", ws);
-    const next: Record<string, boolean[]> = {};
-    for (const p of PRAYERS) next[p] = [false, false, false, false, false, false, false];
+    const m: Record<string, boolean[]> = {};
+    const t: Record<string, boolean[]> = {};
+    for (const p of PRAYERS) {
+      m[p] = [...EMPTY_WEEK];
+      t[p] = [...EMPTY_WEEK];
+    }
     (data ?? []).forEach((r: any) => {
-      next[r.prayer] = (r.days as boolean[]) ?? next[r.prayer];
+      if (r.user_id === user.id) m[r.prayer] = (r.days as boolean[]) ?? m[r.prayer];
+      else t[r.prayer] = (r.days as boolean[]) ?? t[r.prayer];
     });
-    setRows(next);
+    setMine(m);
+    setTheirs(t);
   };
   useEffect(() => {
     load();
     /* eslint-disable-next-line */
-  }, [user?.id]);
+  }, [user?.id, partnerProfile?.id]);
 
   const toggle = async (prayer: string, idx: number, next: boolean) => {
     if (!user) return;
-    const current = rows[prayer] ?? [false, false, false, false, false, false, false];
+    const current = mine[prayer] ?? [...EMPTY_WEEK];
     const updated = current.map((v, i) => (i === idx ? next : v));
-    setRows({ ...rows, [prayer]: updated });
+    setMine({ ...mine, [prayer]: updated });
     const { error } = await supabase
       .from("deen_prayers")
       .upsert(
@@ -171,11 +181,22 @@ function PrayerTracker() {
 
   return (
     <TrackerCard title="Prayers">
-      <div className="space-y-3">
+      <div className="space-y-4">
         {PRAYERS.map((p) => (
-          <div key={p}>
-            <p className="text-xs font-display uppercase tracking-widest mb-1">{p}</p>
-            <WeekCircles days={rows[p] ?? []} onToggle={(i, n) => toggle(p, i, n)} size="sm" />
+          <div key={p} className="space-y-1">
+            <p className="text-xs font-display uppercase tracking-widest">{p}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">You</p>
+                <WeekCircles days={mine[p] ?? EMPTY_WEEK} onToggle={(i, n) => toggle(p, i, n)} size="sm" />
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1 truncate">
+                  @{partnerProfile?.username ?? "partner"}
+                </p>
+                <WeekCircles days={theirs[p] ?? EMPTY_WEEK} size="sm" readOnly />
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -184,18 +205,27 @@ function PrayerTracker() {
 }
 
 function QuranTracker() {
-  const { user } = useSession();
+  const { user, partnerProfile } = useSession();
   const [page, setPage] = useState<number>(0);
+  const [partnerPage, setPartnerPage] = useState<number>(0);
 
   const load = async () => {
     if (!user) return;
-    const { data } = await supabase.from("deen_quran").select("current_page").eq("user_id", user.id).maybeSingle();
-    setPage((data as any)?.current_page ?? 0);
+    const ids = [user.id, partnerProfile?.id].filter(Boolean) as string[];
+    const { data } = await supabase.from("deen_quran").select("user_id, current_page").in("user_id", ids);
+    let mine = 0;
+    let theirs = 0;
+    (data ?? []).forEach((r: any) => {
+      if (r.user_id === user.id) mine = r.current_page ?? 0;
+      else theirs = r.current_page ?? 0;
+    });
+    setPage(mine);
+    setPartnerPage(theirs);
   };
   useEffect(() => {
     load();
     /* eslint-disable-next-line */
-  }, [user?.id]);
+  }, [user?.id, partnerProfile?.id]);
 
   const inc = async () => {
     if (!user) return;
@@ -210,53 +240,72 @@ function QuranTracker() {
 
   return (
     <TrackerCard title="Quran progress">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-widest text-muted-foreground">Current page</p>
-          <p className="font-display text-4xl text-primary tabular-nums">{page}</p>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl border border-border bg-card/40 p-3">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">You</p>
+          <p className="font-display text-3xl text-primary tabular-nums mt-1">{page}</p>
+          <Button size="sm" className="mt-2 w-full" onClick={inc}>
+            <Plus className="size-3" /> Read 1 page
+          </Button>
         </div>
-        <Button onClick={inc}>
-          <Plus className="size-4" /> Read 1 page
-        </Button>
+        <div className="rounded-xl border border-border bg-card/40 p-3">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground truncate">
+            @{partnerProfile?.username ?? "partner"}
+          </p>
+          <p className="font-display text-3xl text-primary tabular-nums mt-1">{partnerPage}</p>
+          <p className="text-[10px] text-muted-foreground mt-2 italic">read-only</p>
+        </div>
       </div>
     </TrackerCard>
   );
 }
 
 function AthkarTracker() {
-  const { user } = useSession();
+  const { user, partnerProfile } = useSession();
   const ws = useMemo(() => weekStartSaturday(), []);
-  const [rows, setRows] = useState<Record<string, boolean[]>>({});
+  const [mine, setMine] = useState<Record<string, boolean[]>>({});
+  const [theirs, setTheirs] = useState<Record<string, boolean[]>>({});
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [partnerCounts, setPartnerCounts] = useState<Record<string, number>>({});
 
   const load = async () => {
     if (!user) return;
+    const ids = [user.id, partnerProfile?.id].filter(Boolean) as string[];
     const [{ data: a }, { data: d }] = await Promise.all([
-      supabase.from("deen_athkar").select("*").eq("user_id", user.id).eq("week_start", ws),
-      supabase.from("deen_dhikr").select("*").eq("user_id", user.id),
+      supabase.from("deen_athkar").select("*").in("user_id", ids).eq("week_start", ws),
+      supabase.from("deen_dhikr").select("*").in("user_id", ids),
     ]);
-    const next: Record<string, boolean[]> = {};
-    for (const k of ATHKAR_KINDS) next[k.kind] = [false, false, false, false, false, false, false];
+    const m: Record<string, boolean[]> = {};
+    const t: Record<string, boolean[]> = {};
+    for (const k of ATHKAR_KINDS) {
+      m[k.kind] = [...EMPTY_WEEK];
+      t[k.kind] = [...EMPTY_WEEK];
+    }
     (a ?? []).forEach((r: any) => {
-      next[r.kind] = (r.days as boolean[]) ?? next[r.kind];
+      if (r.user_id === user.id) m[r.kind] = (r.days as boolean[]) ?? m[r.kind];
+      else t[r.kind] = (r.days as boolean[]) ?? t[r.kind];
     });
-    setRows(next);
+    setMine(m);
+    setTheirs(t);
     const c: Record<string, number> = {};
+    const pc: Record<string, number> = {};
     (d ?? []).forEach((r: any) => {
-      c[r.kind] = r.count ?? 0;
+      if (r.user_id === user.id) c[r.kind] = r.count ?? 0;
+      else pc[r.kind] = r.count ?? 0;
     });
     setCounts(c);
+    setPartnerCounts(pc);
   };
   useEffect(() => {
     load();
     /* eslint-disable-next-line */
-  }, [user?.id]);
+  }, [user?.id, partnerProfile?.id]);
 
   const toggle = async (kind: string, idx: number, next: boolean) => {
     if (!user) return;
-    const current = rows[kind] ?? [false, false, false, false, false, false, false];
+    const current = mine[kind] ?? [...EMPTY_WEEK];
     const updated = current.map((v, i) => (i === idx ? next : v));
-    setRows({ ...rows, [kind]: updated });
+    setMine({ ...mine, [kind]: updated });
     await supabase
       .from("deen_athkar")
       .upsert(
@@ -279,11 +328,22 @@ function AthkarTracker() {
 
   return (
     <TrackerCard title="Athkar">
-      <div className="space-y-3">
+      <div className="space-y-4">
         {ATHKAR_KINDS.map((k) => (
-          <div key={k.kind}>
-            <p className="text-xs font-display uppercase tracking-widest mb-1">{k.label}</p>
-            <WeekCircles days={rows[k.kind] ?? []} onToggle={(i, n) => toggle(k.kind, i, n)} size="sm" />
+          <div key={k.kind} className="space-y-1">
+            <p className="text-xs font-display uppercase tracking-widest">{k.label}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">You</p>
+                <WeekCircles days={mine[k.kind] ?? EMPTY_WEEK} onToggle={(i, n) => toggle(k.kind, i, n)} size="sm" />
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1 truncate">
+                  @{partnerProfile?.username ?? "partner"}
+                </p>
+                <WeekCircles days={theirs[k.kind] ?? EMPTY_WEEK} size="sm" readOnly />
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -291,15 +351,20 @@ function AthkarTracker() {
         <p className="text-xs font-display uppercase tracking-widest mb-2 text-muted-foreground">Dhikr counter</p>
         <div className="grid grid-cols-3 gap-2">
           {DHIKR_PRESETS.map((d) => (
-            <button
-              key={d.kind}
-              onClick={() => incDhikr(d.kind)}
-              className="rounded-xl border border-border bg-card hover:bg-accent/40 p-3 text-center transition-colors"
-            >
-              <p className="text-xs font-display tracking-wider">{d.label}</p>
-              <p className="font-display text-2xl text-primary tabular-nums mt-1">{counts[d.kind] ?? 0}</p>
-              <p className="text-[10px] text-muted-foreground mt-1">tap +1</p>
-            </button>
+            <div key={d.kind} className="rounded-xl border border-border bg-card/40 p-2 text-center">
+              <p className="text-[11px] font-display tracking-wider">{d.label}</p>
+              <button
+                onClick={() => incDhikr(d.kind)}
+                className="mt-1 w-full rounded-lg border border-border bg-card hover:bg-accent/40 py-2 transition-colors"
+              >
+                <p className="font-display text-2xl text-primary tabular-nums">{counts[d.kind] ?? 0}</p>
+                <p className="text-[10px] text-muted-foreground">tap +1</p>
+              </button>
+              <p className="text-[10px] text-muted-foreground mt-1 truncate">
+                @{partnerProfile?.username ?? "partner"}:{" "}
+                <span className="text-foreground tabular-nums">{partnerCounts[d.kind] ?? 0}</span>
+              </p>
+            </div>
           ))}
         </div>
       </div>
@@ -308,24 +373,28 @@ function AthkarTracker() {
 }
 
 function FastingTracker() {
-  const { user } = useSession();
+  const { user, partnerProfile } = useSession();
   const ws = useMemo(() => weekStartSaturday(), []);
-  const [days, setDays] = useState<boolean[]>([false, false, false, false, false, false, false]);
+  const [days, setDays] = useState<boolean[]>([...EMPTY_WEEK]);
+  const [partnerDays, setPartnerDays] = useState<boolean[]>([...EMPTY_WEEK]);
 
   const load = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from("deen_fasting")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("week_start", ws)
-      .maybeSingle();
-    if (data) setDays((data as any).days ?? days);
+    const ids = [user.id, partnerProfile?.id].filter(Boolean) as string[];
+    const { data } = await supabase.from("deen_fasting").select("*").in("user_id", ids).eq("week_start", ws);
+    let mine: boolean[] = [...EMPTY_WEEK];
+    let theirs: boolean[] = [...EMPTY_WEEK];
+    (data ?? []).forEach((r: any) => {
+      if (r.user_id === user.id) mine = r.days ?? mine;
+      else theirs = r.days ?? theirs;
+    });
+    setDays(mine);
+    setPartnerDays(theirs);
   };
   useEffect(() => {
     load();
     /* eslint-disable-next-line */
-  }, [user?.id]);
+  }, [user?.id, partnerProfile?.id]);
 
   const toggle = async (idx: number, next: boolean) => {
     if (!user) return;
@@ -341,7 +410,18 @@ function FastingTracker() {
 
   return (
     <TrackerCard title="Fasting">
-      <WeekCircles days={days} onToggle={toggle} size="sm" />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">You</p>
+          <WeekCircles days={days} onToggle={toggle} size="sm" />
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1 truncate">
+            @{partnerProfile?.username ?? "partner"}
+          </p>
+          <WeekCircles days={partnerDays} size="sm" readOnly />
+        </div>
+      </div>
     </TrackerCard>
   );
 }
