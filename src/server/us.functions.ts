@@ -101,7 +101,7 @@ export const replaceSyllabus = createServerFn({ method: "POST" })
         [
           {
             journey_id: profile.journey_id,
-            content: data.modules as unknown as object,
+            content: data.modules as any,
             imported_by: context.userId,
             imported_at: new Date().toISOString(),
           },
