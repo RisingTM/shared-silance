@@ -80,7 +80,7 @@ function Studying() {
       .from("us_syllabus_ratings")
       .upsert(
         { journey_id: journey.id, user_id: user.id, item_key: key, rating: value, updated_at: new Date().toISOString() },
-        { onConflict: "user_id,item_key" } as any,
+        { onConflict: "journey_id,user_id,item_key" } as any,
       );
     if (error) {
       toast.error(error.message);
