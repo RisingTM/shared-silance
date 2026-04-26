@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as UsRouteImport } from './routes/us'
 import { Route as UnlockRouteImport } from './routes/unlock'
 import { Route as TodayRouteImport } from './routes/today'
 import { Route as SetupRouteImport } from './routes/setup'
@@ -18,7 +19,15 @@ import { Route as PrivateRouteImport } from './routes/private'
 import { Route as DeenRouteImport } from './routes/deen'
 import { Route as CounterRouteImport } from './routes/counter'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as UsStudyingRouteImport } from './routes/us.studying'
+import { Route as UsHabitsRouteImport } from './routes/us.habits'
+import { Route as UsGalleryRouteImport } from './routes/us.gallery'
 
+const UsRoute = UsRouteImport.update({
+  id: '/us',
+  path: '/us',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UnlockRoute = UnlockRouteImport.update({
   id: '/unlock',
   path: '/unlock',
@@ -64,6 +73,21 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UsStudyingRoute = UsStudyingRouteImport.update({
+  id: '/studying',
+  path: '/studying',
+  getParentRoute: () => UsRoute,
+} as any)
+const UsHabitsRoute = UsHabitsRouteImport.update({
+  id: '/habits',
+  path: '/habits',
+  getParentRoute: () => UsRoute,
+} as any)
+const UsGalleryRoute = UsGalleryRouteImport.update({
+  id: '/gallery',
+  path: '/gallery',
+  getParentRoute: () => UsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -75,6 +99,10 @@ export interface FileRoutesByFullPath {
   '/setup': typeof SetupRoute
   '/today': typeof TodayRoute
   '/unlock': typeof UnlockRoute
+  '/us': typeof UsRouteWithChildren
+  '/us/gallery': typeof UsGalleryRoute
+  '/us/habits': typeof UsHabitsRoute
+  '/us/studying': typeof UsStudyingRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -86,6 +114,10 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupRoute
   '/today': typeof TodayRoute
   '/unlock': typeof UnlockRoute
+  '/us': typeof UsRouteWithChildren
+  '/us/gallery': typeof UsGalleryRoute
+  '/us/habits': typeof UsHabitsRoute
+  '/us/studying': typeof UsStudyingRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -98,6 +130,10 @@ export interface FileRoutesById {
   '/setup': typeof SetupRoute
   '/today': typeof TodayRoute
   '/unlock': typeof UnlockRoute
+  '/us': typeof UsRouteWithChildren
+  '/us/gallery': typeof UsGalleryRoute
+  '/us/habits': typeof UsHabitsRoute
+  '/us/studying': typeof UsStudyingRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -111,6 +147,10 @@ export interface FileRouteTypes {
     | '/setup'
     | '/today'
     | '/unlock'
+    | '/us'
+    | '/us/gallery'
+    | '/us/habits'
+    | '/us/studying'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -122,6 +162,10 @@ export interface FileRouteTypes {
     | '/setup'
     | '/today'
     | '/unlock'
+    | '/us'
+    | '/us/gallery'
+    | '/us/habits'
+    | '/us/studying'
   id:
     | '__root__'
     | '/'
@@ -133,6 +177,10 @@ export interface FileRouteTypes {
     | '/setup'
     | '/today'
     | '/unlock'
+    | '/us'
+    | '/us/gallery'
+    | '/us/habits'
+    | '/us/studying'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -145,10 +193,18 @@ export interface RootRouteChildren {
   SetupRoute: typeof SetupRoute
   TodayRoute: typeof TodayRoute
   UnlockRoute: typeof UnlockRoute
+  UsRoute: typeof UsRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/us': {
+      id: '/us'
+      path: '/us'
+      fullPath: '/us'
+      preLoaderRoute: typeof UsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/unlock': {
       id: '/unlock'
       path: '/unlock'
@@ -212,8 +268,43 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/us/studying': {
+      id: '/us/studying'
+      path: '/studying'
+      fullPath: '/us/studying'
+      preLoaderRoute: typeof UsStudyingRouteImport
+      parentRoute: typeof UsRoute
+    }
+    '/us/habits': {
+      id: '/us/habits'
+      path: '/habits'
+      fullPath: '/us/habits'
+      preLoaderRoute: typeof UsHabitsRouteImport
+      parentRoute: typeof UsRoute
+    }
+    '/us/gallery': {
+      id: '/us/gallery'
+      path: '/gallery'
+      fullPath: '/us/gallery'
+      preLoaderRoute: typeof UsGalleryRouteImport
+      parentRoute: typeof UsRoute
+    }
   }
 }
+
+interface UsRouteChildren {
+  UsGalleryRoute: typeof UsGalleryRoute
+  UsHabitsRoute: typeof UsHabitsRoute
+  UsStudyingRoute: typeof UsStudyingRoute
+}
+
+const UsRouteChildren: UsRouteChildren = {
+  UsGalleryRoute: UsGalleryRoute,
+  UsHabitsRoute: UsHabitsRoute,
+  UsStudyingRoute: UsStudyingRoute,
+}
+
+const UsRouteWithChildren = UsRoute._addFileChildren(UsRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -225,16 +316,8 @@ const rootRouteChildren: RootRouteChildren = {
   SetupRoute: SetupRoute,
   TodayRoute: TodayRoute,
   UnlockRoute: UnlockRoute,
+  UsRoute: UsRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
