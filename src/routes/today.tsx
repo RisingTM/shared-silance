@@ -149,6 +149,92 @@ function TodayPage() {
     checkPing().catch(() => undefined);
   }, [profile]);
 
+  // Today Log: load partner activity since 00:00 today and auto-popup if new since last view.
+  const loadTodayLog = async (autoOpenIfNew: boolean) => {
+    if (!profile?.id || !partnerProfile?.id) return;
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const sinceISO = startOfDay.toISOString();
+    const [{ data: ss }, { data: pp }] = await Promise.all([
+      supabase
+        .from("daily_statuses")
+        .select("id, status, created_at")
+        .eq("user_id", partnerProfile.id)
+        .gte("created_at", sinceISO)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("thinking_pings")
+        .select("id, sent_at")
+        .eq("sender_id", partnerProfile.id)
+        .gte("sent_at", sinceISO)
+        .order("sent_at", { ascending: true }),
+    ]);
+    setPartnerStatusesToday(ss ?? []);
+    setPartnerPingsToday(pp ?? []);
+
+    if (!autoOpenIfNew) return;
+    const key = `silance_today_last_viewed:${profile.id}`;
+    const stored = window.localStorage.getItem(key);
+    const latestMs = Math.max(
+      0,
+      ...((ss ?? []).map((r) => new Date(r.created_at).getTime())),
+      ...((pp ?? []).map((r) => new Date(r.sent_at).getTime())),
+    );
+    if (!stored) {
+      // First visit — seed and don't pop.
+      window.localStorage.setItem(key, String(Date.now()));
+      return;
+    }
+    if (latestMs > Number(stored) && latestMs > 0) {
+      setTodayLogOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    loadTodayLog(true).catch(() => undefined);
+    const onFocus = () => loadTodayLog(true).catch(() => undefined);
+    const onVis = () => {
+      if (document.visibilityState === "visible") onFocus();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+    /* eslint-disable-next-line */
+  }, [profile?.id, partnerProfile?.id]);
+
+  const closeTodayLog = () => {
+    setTodayLogOpen(false);
+    if (profile?.id) {
+      window.localStorage.setItem(`silance_today_last_viewed:${profile.id}`, String(Date.now()));
+    }
+  };
+
+  const todayLogEntries = useMemo(() => {
+    const items: { ts: number; kind: "status" | "ping"; label: string; emoji: string }[] = [];
+    for (const s of partnerStatusesToday) {
+      const m = statusMeta(s.status);
+      items.push({
+        ts: new Date(s.created_at).getTime(),
+        kind: "status",
+        label: m.label,
+        emoji: m.emoji,
+      });
+    }
+    for (const p of partnerPingsToday) {
+      items.push({
+        ts: new Date(p.sent_at).getTime(),
+        kind: "ping",
+        label: "thinking of you",
+        emoji: "🤍",
+      });
+    }
+    return items.sort((a, b) => a.ts - b.ts);
+  }, [partnerStatusesToday, partnerPingsToday]);
+
+
   const cooldownMs = mine ? new Date(mine.created_at).getTime() + STATUS_COOLDOWN_MS - Date.now() : 0;
   const cooldownRemaining = cooldownMs > 0 ? formatRemaining(cooldownMs) : null;
   void tick; // re-render trigger
