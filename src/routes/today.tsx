@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useSession } from "@/lib/session";
@@ -21,7 +21,8 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { History, Heart, RefreshCw, Pause, Play, ScrollText } from "lucide-react";
+import { History, Heart, RefreshCw, Pause, Play, ScrollText, Clock } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { insertWithOfflineQueue } from "@/lib/data-client";
 import { notify } from "@/lib/notifications";
 import { daysUntilNextBirthday } from "@/lib/birthday";
@@ -66,6 +67,11 @@ function TodayPage() {
   const [pingExpiresAt, setPingExpiresAt] = useState<number>(0);
   const [pendingStatus, setPendingStatus] = useState<StatusKey | null>(null);
   const [tick, setTick] = useState(0);
+
+  // Today Log state
+  const [todayLogOpen, setTodayLogOpen] = useState(false);
+  const [partnerStatusesToday, setPartnerStatusesToday] = useState<{ id: string; status: string; created_at: string }[]>([]);
+  const [partnerPingsToday, setPartnerPingsToday] = useState<{ id: string; sent_at: string }[]>([]);
 
   const partnerBirthdayDays = daysUntilNextBirthday((partnerProfile as any)?.birthday ?? null);
 
@@ -142,6 +148,92 @@ function TodayPage() {
     };
     checkPing().catch(() => undefined);
   }, [profile]);
+
+  // Today Log: load partner activity since 00:00 today and auto-popup if new since last view.
+  const loadTodayLog = async (autoOpenIfNew: boolean) => {
+    if (!profile?.id || !partnerProfile?.id) return;
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const sinceISO = startOfDay.toISOString();
+    const [{ data: ss }, { data: pp }] = await Promise.all([
+      supabase
+        .from("daily_statuses")
+        .select("id, status, created_at")
+        .eq("user_id", partnerProfile.id)
+        .gte("created_at", sinceISO)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("thinking_pings")
+        .select("id, sent_at")
+        .eq("sender_id", partnerProfile.id)
+        .gte("sent_at", sinceISO)
+        .order("sent_at", { ascending: true }),
+    ]);
+    setPartnerStatusesToday(ss ?? []);
+    setPartnerPingsToday(pp ?? []);
+
+    if (!autoOpenIfNew) return;
+    const key = `silance_today_last_viewed:${profile.id}`;
+    const stored = window.localStorage.getItem(key);
+    const latestMs = Math.max(
+      0,
+      ...((ss ?? []).map((r) => new Date(r.created_at).getTime())),
+      ...((pp ?? []).map((r) => new Date(r.sent_at).getTime())),
+    );
+    if (!stored) {
+      // First visit — seed and don't pop.
+      window.localStorage.setItem(key, String(Date.now()));
+      return;
+    }
+    if (latestMs > Number(stored) && latestMs > 0) {
+      setTodayLogOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    loadTodayLog(true).catch(() => undefined);
+    const onFocus = () => loadTodayLog(true).catch(() => undefined);
+    const onVis = () => {
+      if (document.visibilityState === "visible") onFocus();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+    /* eslint-disable-next-line */
+  }, [profile?.id, partnerProfile?.id]);
+
+  const closeTodayLog = () => {
+    setTodayLogOpen(false);
+    if (profile?.id) {
+      window.localStorage.setItem(`silance_today_last_viewed:${profile.id}`, String(Date.now()));
+    }
+  };
+
+  const todayLogEntries = useMemo(() => {
+    const items: { ts: number; kind: "status" | "ping"; label: string; emoji: string }[] = [];
+    for (const s of partnerStatusesToday) {
+      const m = statusMeta(s.status);
+      items.push({
+        ts: new Date(s.created_at).getTime(),
+        kind: "status",
+        label: m.label,
+        emoji: m.emoji,
+      });
+    }
+    for (const p of partnerPingsToday) {
+      items.push({
+        ts: new Date(p.sent_at).getTime(),
+        kind: "ping",
+        label: "thinking of you",
+        emoji: "🤍",
+      });
+    }
+    return items.sort((a, b) => a.ts - b.ts);
+  }, [partnerStatusesToday, partnerPingsToday]);
+
 
   const cooldownMs = mine ? new Date(mine.created_at).getTime() + STATUS_COOLDOWN_MS - Date.now() : 0;
   const cooldownRemaining = cooldownMs > 0 ? formatRemaining(cooldownMs) : null;
@@ -262,10 +354,48 @@ function TodayPage() {
 
   return (
     <div className="space-y-6">
-      <div className="text-center">
+      <div className="text-center relative">
         <h2 className="font-display text-3xl tracking-widest text-primary">TODAY</h2>
         <p className="text-muted-foreground italic mt-1">Your journey at a glance.</p>
+        <button
+          aria-label="Open today log"
+          onClick={() => setTodayLogOpen(true)}
+          className="absolute top-0 right-0 size-8 rounded-full text-muted-foreground/60 hover:text-muted-foreground hover:bg-accent/40 inline-flex items-center justify-center transition-colors"
+        >
+          <Clock className="size-4" />
+        </button>
       </div>
+
+      {/* Today Log sheet */}
+      <Sheet open={todayLogOpen} onOpenChange={(o) => (o ? setTodayLogOpen(true) : closeTodayLog())}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle className="font-display tracking-widest">TODAY LOG</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-3">
+            {todayLogEntries.length === 0 ? (
+              <p className="text-sm italic text-muted-foreground text-center py-12">nothing yet today…</p>
+            ) : (
+              <ul className="space-y-2">
+                {todayLogEntries.map((e, i) => (
+                  <li
+                    key={i}
+                    className="rounded-lg border border-border/60 bg-card/40 px-3 py-2 flex items-center gap-3"
+                  >
+                    <span className="text-xl shrink-0">{e.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm leading-tight truncate">{e.label}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {new Date(e.ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* NC counter card */}
       <div className="parchment-card rounded-2xl p-6 text-center space-y-3 relative">

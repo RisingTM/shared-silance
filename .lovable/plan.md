@@ -1,127 +1,206 @@
+# Plan
 
-# Big update: Deen reorder, Us page (Gallery + Habits + Studying), real Web Push
+Six tightly-scoped changes. The big one is collapsing the `/us/*` routes into the existing Private/Sanctuary page as inline subviews (same pattern Private already uses).
 
-This is a large addition. Grouping into phases for clarity.
+---
 
-## 1. Deen page reorganization
+## 1. Today Log (subtle popup + button)
 
-- Render order: Prayers → Athkar → Quran progress → Fasting → Dua card + Personal duas
-- Move week range label (`Apr 19 – Apr 25`) to a single page-level header at the very top; remove the per-card `weekRangeLabel` from `TrackerCard`
-- `WeekCircles` gets a new `tone` prop: `"gold" | "muted"`. Mine = gold (current `bg-primary`), partner = muted (`bg-amber-200/30 dark:bg-amber-900/20`, no hover, fully read-only). Each row clearly labelled "You" / `@partnerUsername`
-- Personal duas: hide the form behind a `+` button; tapping reveals the inputs in a small inline panel; collapse on save
+**File:** `src/routes/today.tsx`
 
-## 2. Us page (new top-level route)
+- Add a small icon button (Clock, no label) at the top of the page next to the title. Tapping opens a `Sheet` (right side) showing the Today Log.
+- Log content: today-only chronological list (oldest → newest) of partner activity, queried from existing tables on open:
+  - `daily_statuses` where `user_id = partner.id` and `created_at >= start of today` → `"3:42 pm — {emoji} {label}"` (using `statusMeta`).
+  - `thinking_pings` where `sender_id = partner.id` and `sent_at >= start of today` → `"6:15 pm — thinking of you 🤍"`.
+- Empty state: italic "nothing yet today…".
+- Read-only list, no actions.
 
-### 2.1 Nav + entry gate
-- Add `/us` route + nav tab (icon: `Heart` or `Users`) in `AppShell` — switches main tab grid to 5 items (Today, Private, Deen, Us, Unlock)
-- First entry: prompt to **create** a shared Us password (6+ chars). Store as bcrypt-style hash on `journeys.us_password_hash` (server fn). On subsequent entries: prompt to enter password; verify server-side; on success cache an unlock flag in `sessionStorage` (cleared on tab close)
-- Owner-only **reset** in Settings sheet ("Reset Us password") — clears hash, next visit re-prompts both users to create new one. Resets do NOT delete gallery/habit/study data
-- Us page itself = card grid like Private: Gallery, Habits, Studying
+**Auto-popup logic:**
+- Key: `silance_today_last_viewed:{userId}` in `localStorage`, value = ISO timestamp.
+- On Today page mount and on `focus`/`visibilitychange` → visible: query partner's most recent `daily_statuses.created_at` and `thinking_pings.sent_at`. If max(those) > stored timestamp → open the sheet automatically.
+- On sheet close (manual or outside tap): write `Date.now()` to that key so it doesn't reopen until new partner activity arrives.
+- First-ever visit (no key stored): seed key = now, do NOT auto-open.
+- Only partner activity counts — own rows excluded.
 
-### 2.2 Gallery
-- Storage bucket `us-gallery` (private) with RLS: only authenticated users in the same `journey_id` can read/write
-- Tables:
-  - `us_albums` (id, journey_id, owner_id, name, is_shared bool, created_at)
-  - `us_photos` (id, journey_id, album_id nullable, uploader_id, storage_path, caption, sort_order int, created_at)
-- Main view: all photos ordered by `sort_order` then upload date; long-press / drag to reorder (manual `sort_order` updates)
-- Albums: either user can create. Private (creator only) vs Shared (both). Convert private→shared via toggle by owner of album
-- Permissions enforced in RLS:
-  - Journey owner (profile.role = 'owner') = admin: can delete any photo or any album in their journey
-  - Partner: can upload to shared albums; can delete only their own uploads (uploader_id = auth.uid())
-  - Private albums: only creator can read/write photos in them, until is_shared flipped
-- Album view: photo grid, tap → fullscreen modal with pinch-zoom (use `react-zoom-pan-pinch` or simple `touch-action: pinch-zoom` CSS) + Download button (signed URL → anchor download)
-- No upload limits
+---
 
-### 2.3 Habits tracker
-- Tables (RLS scoped to journey + visibility flag):
-  - `us_habit_sections` (id, user_id, journey_id, name, sort_order, created_at)
-  - `us_habits` (id, user_id, journey_id, section_id, name, visibility text in ['private','visible','shared'], sort_order, created_at)
-  - `us_habit_logs` (id, habit_id, user_id, week_start date, days bool[7], updated_at) — same Saturday-anchored format
-- Each user creates own sections + habits; no defaults. Sections always visible (no collapse) with header label
-- Habits visibility:
-  - `private` — only creator sees (default), togglable to `visible` later
-  - `visible` — partner sees name + their own progress logs but cannot toggle
-  - `shared` — both track independently against the same habit name; rendered side-by-side under matching section header
-- Weekly 7-circle row, gold for self, muted read-only for partner, resets every Saturday (week_start key)
-- Stats card pinned at top: % completed today, % completed this week — recomputed live on toggle
-- Per-habit Log button → Sheet with weekly/monthly toggle:
-  - Weekly view: list past `us_habit_logs` rows, completion %, current streak
-  - Monthly view: aggregate by month — best week, average completion, total days hit
-- Partner section: at bottom of own page, show partner's sections + visible/shared habits with muted read-only WeekCircles. Private habits hidden
+## 2. Deen — Prayer & Fasting grid alignment
 
-### 2.4 Studying
-- Tables:
-  - `us_syllabus` (id, journey_id, content jsonb [{module, branches:[{name, items:[string]}]}], imported_by, imported_at) — single row per journey (UPSERT, replaces on import)
-  - `us_syllabus_ratings` (id, journey_id, user_id, item_key text, rating int 0–5) — `item_key` = `module/branch/item` path; UNIQUE(journey_id, user_id, item_key)
-- Owner-only import (RLS check on `us_syllabus`): paste textarea, parser handles:
-  - `# X` → module
-  - `- Y` → branch (must be after a `#`)
-  - other lines → item (must be after a `-`)
-  - Branches without preceding module or items without preceding branch → parser surfaces a clear inline error toast with line number; nothing saved
-- New import shows AlertDialog "Replace current syllabus?" before overwriting
-- Owner can edit syllabus tree post-import (rename/add/remove module/branch/item) — writes back to `us_syllabus.content`
-- Renders as expandable tree (`<details>`-style or `<Accordion>`)
-- Each item row: side-by-side toggles (You | @partner). Toggle is a 6-segment pill (0–5) with color ramp:
-  - 0 red, 1 orange-red, 2 orange, 3 yellow, 4 yellow-green, 5 green (Tailwind classes)
-- Each user only writes their own ratings (RLS: user_id = auth.uid()); partner column read-only
-- Progress tab/button at top → opens progress sheet:
-  - Pie chart per person of distribution 0–5 (use `recharts` — already installed via `chart.tsx`)
-  - Per-module average for both, color-coded swatch
-  - Per-branch averages within each module
-  - Counts: "12 of 34 items rated ≥4"
+**File:** `src/routes/deen.tsx`
 
-## 3. Real Web Push for partner status updates
+- Replace the current `grid-cols-2` layout for prayers/fasting with a per-row 2-column grid using `grid-cols-[80px_1fr]` so the label column is fixed width and circles always align horizontally regardless of username length.
+- New row structure for each prayer:
+  ```
+  [PRAYER NAME header]
+  [ "You"        | 7 circles gold     ]
+  [ @username    | 7 circles muted RO ]
+  ```
+- Apply the identical `grid-cols-[80px_1fr]` structure to the Fasting tracker.
+- Username cell uses `truncate` so long names are clipped, never expanding.
+- `YouRow`/`PartnerRow` helpers replaced by a single inline 2-col row.
 
-- Already capturing `push_subscriptions` (endpoint, p256dh, auth)
-- Add VAPID keys as Lovable Cloud secrets: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (mailto:…). I'll request these via `add_secret` after the plan is approved (with a one-shot generator script the user can run, or I generate them in a server fn and you copy the values back — easiest path: I generate locally with a node script and ask you to paste them as secrets)
-- Update `notifyPartnerUpdate` server fn:
-  - Use `web-push` package with the VAPID keys
-  - Fetch partner's `push_subscriptions` rows
-  - Send `{ title: "@<senderUsername>", body: <statusLabel>, url: "/today" }` payload
-  - Best-effort: catch 404/410 and delete dead subs
-- `today.tsx` already calls `notifyPartnerUpdate({ partnerId, message: "@me · I'm healing 🌱" })` — change payload to include `senderUsername` + the exact `statusLabel` (no emoji prefix munging)
-- Update `public/sw.js` `push` handler to read JSON payload `{ title, body, url }` and call `showNotification` + open URL on click. (Sw already handles notificationclick — confirm and patch)
-- Expose VAPID **public** key to client via `VITE_VAPID_PUBLIC_KEY` env var so `registerPushSubscription` can call `pushManager.subscribe({ userVisibleOnly:true, applicationServerKey })` instead of just reading existing subs
+---
 
-## Database migration (single file)
+## 3. Dhikr — add Astaghfirullah in 1+3 layout
 
-- `journeys`: add `us_password_hash text`
-- `us_albums`, `us_photos` tables + RLS
-- `us_habit_sections`, `us_habits`, `us_habit_logs` tables + RLS
-- `us_syllabus`, `us_syllabus_ratings` tables + RLS
-- Storage bucket `us-gallery` (private) + storage RLS policies (insert by journey member, read by journey member, delete by uploader OR journey owner)
-- All policies use existing `current_journey_id()` and `partner_user_id()` helpers
-- Add helper SQL function `is_journey_owner()` returning bool for owner-admin gallery deletes
+**File:** `src/routes/deen.tsx`
 
-## Files to create
+- Add `astaghfirullah` to `DHIKR_PRESETS` but render it separately (not in the 3-col grid).
+- Layout:
+  - Row 1: Astaghfirullah — full-width prominent card, larger count text (e.g. `text-4xl`), same `tap +1` behavior, same partner count line beneath.
+  - Row 2: existing 3-column grid with SubhanAllah, Alhamdulillah, Allahu Akbar.
+- All four use the same `incDhikr` upsert into `deen_dhikr` (table already supports any `kind` string).
 
-- `src/routes/us.tsx` — gate + card grid
-- `src/routes/us.gallery.tsx` — albums list + photos
-- `src/routes/us.habits.tsx` — full habit tracker
-- `src/routes/us.studying.tsx` — syllabus + ratings + progress tab
-- `src/components/UsLockGate.tsx` — create/enter password UI
-- `src/components/PinchZoomImage.tsx` — fullscreen pinch zoom
-- `src/components/RatingPill.tsx` — 0–5 segmented control with color ramp
-- `src/lib/syllabus.ts` — parser (`parseSyllabus(text): { modules } | { error }`)
-- `src/lib/us-session.ts` — sessionStorage unlock helper
-- `src/server/us.functions.ts` — `setUsPassword`, `verifyUsPassword`, `resetUsPassword`, syllabus replace/edit
-- `src/server/push.functions.ts` — `sendPushToPartner` using `web-push`
-- `supabase/migrations/<ts>_us_features.sql`
+---
 
-## Files to edit
+## 4. Today's-day indicator across all weekly trackers
 
-- `src/routes/deen.tsx` — reorder, page-level week label, gold/muted props, collapsible personal-dua form
-- `src/components/WeekCircles.tsx` — add `tone` prop
-- `src/components/AppShell.tsx` — Us tab in nav, Settings sheet adds "Reset Us password" (owner-only)
-- `src/server/journey.functions.ts` — `notifyPartnerUpdate` calls real push send; add `resetUsPassword` (owner gate)
-- `src/lib/notifications.ts` — `registerPushSubscription` actually subscribes via `pushManager.subscribe` using `VITE_VAPID_PUBLIC_KEY`
-- `src/routes/today.tsx` — pass `{ senderUsername, body: statusLabel }` into notifyPartnerUpdate
-- `public/sw.js` — proper `push` event JSON parsing + notification UI
-- `package.json` — add `web-push`, `bcryptjs`, `react-zoom-pan-pinch`
+**File:** `src/components/WeekCircles.tsx`
 
-## Open items needing your action after approval
+- Add an internal helper `todayIndex()` that returns `(new Date().getDay() + 1) % 7` (Saturday = 0, Friday = 6) — matches the existing Saturday-anchored week.
+- For the circle whose index matches today, add an extra ring class regardless of on/off state, e.g. `ring-2 ring-primary/50 ring-offset-1 ring-offset-background shadow-[0_0_0_2px_hsl(var(--primary)/0.25)]`. Subtle glow, not a CTA.
+- Works for both `gold` and `muted` tones, and for `readOnly` rows.
+- Because every tracker (prayers, athkar, fasting, habits, partner habits) uses `WeekCircles`, the change applies everywhere with no per-route edits.
 
-1. I will request **VAPID keys** as secrets (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) — I'll generate them in chat for you to paste, since they need to live in both server secrets and client env (`VITE_VAPID_PUBLIC_KEY`)
-2. Confirmed in your answers: owner-only Us password reset, real Web Push.
+---
 
-No existing functionality (auth, session, private page, NC counter) is touched.
+## 5. Merge Us into Sanctuary (Private page) as inline subviews
+
+This is the largest change. The Us page becomes a second card group inside the existing Private route — no separate routes, no router navigation, no password gate.
+
+### Routing & navigation cleanup
+
+**Files:**
+- Delete `src/routes/us.tsx`, `src/routes/us.gallery.tsx`, `src/routes/us.habits.tsx`, `src/routes/us.studying.tsx`. (TanStack regenerates `routeTree.gen.ts`.)
+- Delete `src/components/UsLockGate.tsx` and `src/lib/us-session.ts` (no longer used).
+- `src/components/AppShell.tsx`: remove the `/us` entry from `TABS`. Bottom nav already uses `grid-cols-4` so the layout naturally accommodates the now-4 tabs.
+
+### New Sanctuary structure
+
+**File:** `src/routes/private.tsx` (rename header label to "SANCTUARY", route stays `/private`)
+
+```
+SANCTUARY
+  Personal section (header)
+    [Journal] [Unsent Thoughts] [Goals]   ← unchanged
+  Us section (header)
+    [Gallery] [Habits] [Studying] [Favourite Things] [Check-in Calendar]
+```
+
+- One `useState<SectionKey | null>(null)` drives both groups. `SectionKey` extended to:
+  `"journal" | "unsent" | "goals" | "us-gallery" | "us-habits" | "us-studying" | "us-favourites" | "us-checkin"`.
+- When `open !== null`, render only that subview + a Back button (`setOpen(null)`).
+- Each Us subview is implemented as an inline component in this same file (or split into co-located files under `src/components/sanctuary/` for readability — same module boundary, no routes).
+- Data for each subview loads inside its own `useEffect` when mounted (i.e. when its card is opened) — not on Sanctuary page mount.
+- No `<Link>` or `navigate()` calls anywhere in the Sanctuary tree.
+
+### Us subview specs (each is a self-contained inline component)
+
+#### Gallery
+- Tabs at top: **All Photos** (flat grid, ordered by `created_at desc`), **Albums** (grid of album cards).
+- Either user can create albums; toggle `is_shared` at create time and after.
+- Long-press (≥500ms via `pointerdown`+timer) on any photo enters selection mode → checkboxes overlay → bulk Delete (own-only unless owner) and bulk Move-to-album.
+- Photo viewer: fullscreen `Dialog`, `<img style={{ touchAction: "pinch-zoom" }}>`, Download button, uploader's `@username` shown subtly at the bottom.
+- Permissions enforced client-side AND by existing RLS:
+  - Owner (`profile.role === "owner"`) can delete any photo/album.
+  - Partner can upload to shared albums and delete only own uploads.
+  - Private albums: only creator sees them (RLS already does this).
+- Storage: `us-gallery` bucket, path `{journey_id}/{uuid}.{ext}`.
+- Signed URLs generated fresh on every load via `createSignedUrl(path, 3600)` — never persisted.
+- No upload limits.
+
+#### Habits
+- Each user manages their own sections + habits independently. No defaults — start empty.
+- For each habit row, a `WeekCircles` (Sa→Fr) with today's indicator from change #4. Gold for self, muted+read-only for partner.
+- Visibility per habit: `private` / `visible` / `shared` (existing column).
+- For `shared` habits: render BOTH circle rows inline under the same habit name (your row gold, partner's row muted) — not pushed to a "partner's habits" section at the bottom.
+- Streak counter next to each habit name (e.g. `🔥 5`): query `us_habit_logs` for that habit + last N weeks, count consecutive days with `true` ending at today. Computed in-memory from already-loaded logs.
+- "Add habit" button at bottom of each section AND a top-level one.
+- **Stats card at top:** side-by-side blocks for you and partner showing % done today and % done this week, computed live from loaded logs.
+- **Per-habit log button** opens a Sheet with weekly/monthly tabs:
+  - Weekly: past N weeks of circle rows, completion %, current streak.
+  - Monthly: best week, average completion, total days hit.
+  - Loads extra `us_habit_logs` rows for that `habit_id` on open.
+- Bottom of view: partner's `visible` (non-shared) habits as muted read-only rows. Private partner habits hidden entirely (RLS already enforces).
+
+#### Studying
+- Owner-only paste-import via existing `parseSyllabus`. Show inline error with line number on parse failure; nothing saved.
+- Confirmation `AlertDialog` before replacing an existing syllabus.
+- Owner can edit (rename/add/remove modules/branches/items) using the same paste editor.
+- One active syllabus per journey (existing `us_syllabus` table).
+- Tree UI: modules as collapsibles → branches as collapsibles → items.
+- Top bar: search input filters tree in real time (case-insensitive substring on item text), and a "Needs work" toggle showing only items where `min(yourRating, partnerRating)` is 0–2.
+- Each item row: two `RatingPill` columns side-by-side — You (editable), Partner (read-only). Existing 6-segment 0–5 colors already match spec.
+- **Progress tab** (toggle at top, second view of the same data):
+  - Pie charts (`recharts` `PieChart`) per person of confidence distribution (count of 0/1/2/3/4/5).
+  - Overall average per person side-by-side.
+  - Per-module average (color-coded with `ratingColorClass`).
+  - Per-branch averages within each module.
+  - Counts: "X of Y items rated 4 or above".
+- Add `recharts` if not yet installed (it is a common shadcn dep — verify in step 0).
+
+#### Favourite Things About You
+- New table `us_favourites` (see DB migration below).
+- Each user maintains own list, partner read-only.
+- "+" button reveals an inline `Input`/`Textarea` row, save collapses it. No limit.
+- Each entry shows the date below text in muted small type.
+- Top-level **Shuffle** button surfaces one random own entry (or partner's? — spec says "things they love about their partner", so each list is what *I love about you*; shuffle picks from MY list to re-read).
+- Scrollable list, newest at top. Partner's list shown in a separate read-only section below (or in a tab — implement as a tab toggle "Mine"/"Theirs" to keep it clean).
+
+#### Check-in Calendar
+- Month view of which days each user submitted a `daily_statuses` entry that month.
+- Build from a single query: `daily_statuses` for the journey, between month start and end, grouped by user/day.
+- Render: 7-col grid of date cells. Each cell shows date number + small dots: gold for self (if checked in that day), muted for partner. Both dots if both checked in.
+- Today's cell has a subtle ring.
+- Prev/Next month chevrons.
+- Summary line below: "you checked in X of N days" and "@partner checked in Y of N days".
+- No content shown — presence only.
+
+### Database migration
+
+One new table, no other schema changes (all other Us tables already exist with correct RLS):
+
+```sql
+CREATE TABLE public.us_favourites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  journey_id UUID NOT NULL,
+  user_id UUID NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE public.us_favourites ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "favourites select" ON public.us_favourites
+  FOR SELECT TO authenticated
+  USING (journey_id = current_journey_id());
+CREATE POLICY "favourites insert" ON public.us_favourites
+  FOR INSERT TO authenticated
+  WITH CHECK (user_id = auth.uid() AND journey_id = current_journey_id());
+CREATE POLICY "favourites delete" ON public.us_favourites
+  FOR DELETE TO authenticated
+  USING (user_id = auth.uid());
+CREATE POLICY "favourites update" ON public.us_favourites
+  FOR UPDATE TO authenticated
+  USING (user_id = auth.uid());
+```
+
+Both partners can read all entries in the journey (per spec — partner can read but not edit). Only the author can delete/edit their own.
+
+### Onboarding tour
+- `src/components/OnboardingTour.tsx` likely references "Us" — check and update copy to mention Sanctuary > Us instead. (Will verify in implementation.)
+
+---
+
+## 6. Misc cleanup
+
+- Verify `recharts` is in `package.json` (likely yes via shadcn `chart.tsx`). If missing, `bun add recharts`.
+- After deleting `src/routes/us*.tsx`, the auto-generated `routeTree.gen.ts` will rebuild without those entries — no manual edit.
+- Keep all existing parchment styling, dark/light mode, mobile-first sizes.
+
+---
+
+## Out of scope / explicit non-changes
+- Personal group cards (Journal, Unsent, Goals) — code untouched.
+- Auth, Today counter, Deen Quran/Athkar storage shapes — untouched aside from items above.
+- Existing `us_*` tables (albums, photos, habits, sections, habit_logs, syllabus, ratings) — schema unchanged, only new `us_favourites`.
+- The Us password infrastructure (`us_password_hash` column, `setUsPassword`/`verifyUsPassword`/`resetUsPassword` server fns) is left in the DB/server but no longer invoked from UI. Removing the column is risky and not requested — leaving it is safe and reversible.

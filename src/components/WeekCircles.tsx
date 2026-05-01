@@ -2,40 +2,50 @@
 // Index 0 = Saturday, 6 = Friday.
 export const DAY_LABELS = ["Sa", "Su", "Mo", "Tu", "We", "Th", "Fr"];
 
+// Index of today within a Saturday-anchored week (0 = Sat, 6 = Fri).
+export function todayIndex(d: Date = new Date()): number {
+  return (d.getDay() + 1) % 7;
+}
+
 export function WeekCircles({
   days,
   onToggle,
   size = "md",
   readOnly = false,
   tone = "gold",
+  highlightToday = true,
 }: {
   days: boolean[];
   onToggle?: (index: number, next: boolean) => void;
   size?: "sm" | "md";
   readOnly?: boolean;
   tone?: "gold" | "muted";
+  highlightToday?: boolean;
 }) {
   const dim = size === "sm" ? "size-7 text-[10px]" : "size-9 text-xs";
   const onClass =
     tone === "muted"
       ? "bg-amber-200/30 dark:bg-amber-900/30 text-foreground/70 border-amber-200/40 dark:border-amber-900/40"
       : "bg-primary/80 text-primary-foreground border-primary";
+  const today = todayIndex();
   return (
     <div className="flex justify-between gap-1">
       {DAY_LABELS.map((d, i) => {
         const on = !!days[i];
+        const isToday = highlightToday && i === today;
         return (
           <button
             key={i}
             type="button"
             disabled={readOnly}
-            aria-label={`${d} ${on ? "done" : "not done"}`}
+            aria-label={`${d} ${on ? "done" : "not done"}${isToday ? " (today)" : ""}`}
             onClick={() => !readOnly && onToggle?.(i, !on)}
             className={[
               "rounded-full border font-display tracking-wider flex items-center justify-center transition-colors",
               dim,
               on ? onClass : "bg-muted/40 text-muted-foreground border-border hover:bg-accent/40",
               readOnly && "cursor-default opacity-90",
+              isToday && "ring-2 ring-primary/60 ring-offset-2 ring-offset-background",
             ]
               .filter(Boolean)
               .join(" ")}
