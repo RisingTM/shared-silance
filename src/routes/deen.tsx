@@ -4,7 +4,7 @@ import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
 import { duaForDate } from "@/lib/dua";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Minus, Plus, X } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -261,15 +261,34 @@ function QuranTracker() {
     await supabase.from("deen_quran_log").insert({ user_id: user.id, log_date: today, pages: 1 });
   };
 
+  const dec = async () => {
+    if (!user || page <= 0) return;
+    const next = Math.max(0, page - 1);
+    setPage(next);
+    const today = new Date().toISOString().slice(0, 10);
+    await supabase.from("deen_quran").upsert(
+      { user_id: user.id, current_page: next, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" },
+    );
+    await supabase.from("deen_quran_log").insert({ user_id: user.id, log_date: today, pages: -1 });
+  };
+
   return (
     <TrackerCard title="Quran progress">
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-border bg-card/40 p-3">
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground">You</p>
           <p className="font-display text-3xl text-primary tabular-nums mt-1">{page}</p>
-          <Button size="sm" className="mt-2 w-full" onClick={inc}>
-            <Plus className="size-3" /> Read 1 page
-          </Button>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Button size="sm" onClick={inc} aria-label="Read 1 page">
+              <Plus className="size-3" />
+              <span className="hidden sm:inline ml-1">Read 1 page</span>
+            </Button>
+            <Button size="sm" variant="outline" onClick={dec} disabled={page <= 0} aria-label="Remove 1 page">
+              <Minus className="size-3" />
+              <span className="hidden sm:inline ml-1">Remove 1</span>
+            </Button>
+          </div>
         </div>
         <div className="rounded-xl border border-amber-200/40 dark:border-amber-900/40 bg-amber-200/10 dark:bg-amber-900/10 p-3">
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground truncate">
