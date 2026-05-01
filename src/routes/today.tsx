@@ -68,6 +68,11 @@ function TodayPage() {
   const [pendingStatus, setPendingStatus] = useState<StatusKey | null>(null);
   const [tick, setTick] = useState(0);
 
+  // Today Log state
+  const [todayLogOpen, setTodayLogOpen] = useState(false);
+  const [partnerStatusesToday, setPartnerStatusesToday] = useState<{ id: string; status: string; created_at: string }[]>([]);
+  const [partnerPingsToday, setPartnerPingsToday] = useState<{ id: string; sent_at: string }[]>([]);
+
   const partnerBirthdayDays = daysUntilNextBirthday((partnerProfile as any)?.birthday ?? null);
 
   const load = async () => {
