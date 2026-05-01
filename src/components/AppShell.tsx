@@ -2,7 +2,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
 import { useSession, signOut } from "@/lib/session";
 import { Button } from "@/components/ui/button";
-import { Heart, Sparkles, BookOpen, Unlock, Moon, Sun, Settings, LogOut, CalendarIcon, Users } from "lucide-react";
+import { Heart, Sparkles, BookOpen, Unlock, Moon, Sun, Settings, LogOut, CalendarIcon } from "lucide-react";
 import { OnboardingTour } from "./OnboardingTour";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "./ui/sheet";
 import { Label } from "./ui/label";
