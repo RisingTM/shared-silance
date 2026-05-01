@@ -32,6 +32,7 @@ const DHIKR_PRESETS = [
   { kind: "alhamdulillah", label: "Alhamdulillah" },
   { kind: "allahuakbar", label: "Allahu Akbar" },
 ] as const;
+const ASTAGHFIRULLAH = { kind: "astaghfirullah", label: "Astaghfirullah" } as const;
 
 const EMPTY_WEEK: boolean[] = [false, false, false, false, false, false, false];
 
@@ -62,20 +63,12 @@ function TrackerCard({ title, children }: { title: string; children: React.React
   );
 }
 
-function YouRow({ children }: { children: React.ReactNode }) {
+// Aligned 2-column row: fixed 80px label column + circles area.
+function AlignedRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">You</p>
-      {children}
-    </div>
-  );
-}
-
-function PartnerRow({ name, children }: { name: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1 truncate">@{name}</p>
-      {children}
+    <div className="grid grid-cols-[72px_1fr] gap-2 items-center">
+      <p className="text-[10px] uppercase tracking-widest text-muted-foreground truncate">{label}</p>
+      <div>{children}</div>
     </div>
   );
 }
@@ -114,19 +107,21 @@ function PrayerTracker() {
     if (error) toast.error(error.message);
   };
 
+  const partnerLabel = `@${partnerProfile?.username ?? "partner"}`;
+
   return (
     <TrackerCard title="Prayers">
-      <div className="space-y-4">
+      <div className="space-y-5">
         {PRAYERS.map((p) => (
-          <div key={p} className="space-y-1">
+          <div key={p} className="space-y-2">
             <p className="text-xs font-display uppercase tracking-widest">{p}</p>
-            <div className="grid grid-cols-2 gap-3">
-              <YouRow>
+            <div className="space-y-2">
+              <AlignedRow label="You">
                 <WeekCircles days={mine[p] ?? EMPTY_WEEK} onToggle={(i, n) => toggle(p, i, n)} size="sm" tone="gold" />
-              </YouRow>
-              <PartnerRow name={partnerProfile?.username ?? "partner"}>
+              </AlignedRow>
+              <AlignedRow label={partnerLabel}>
                 <WeekCircles days={theirs[p] ?? EMPTY_WEEK} size="sm" readOnly tone="muted" />
-              </PartnerRow>
+              </AlignedRow>
             </div>
           </div>
         ))}
@@ -189,25 +184,45 @@ function AthkarTracker() {
     );
   };
 
+  const partnerLabel = `@${partnerProfile?.username ?? "partner"}`;
+
   return (
     <TrackerCard title="Athkar">
-      <div className="space-y-4">
+      <div className="space-y-5">
         {ATHKAR_KINDS.map((k) => (
-          <div key={k.kind} className="space-y-1">
+          <div key={k.kind} className="space-y-2">
             <p className="text-xs font-display uppercase tracking-widest">{k.label}</p>
-            <div className="grid grid-cols-2 gap-3">
-              <YouRow>
+            <div className="space-y-2">
+              <AlignedRow label="You">
                 <WeekCircles days={mine[k.kind] ?? EMPTY_WEEK} onToggle={(i, n) => toggle(k.kind, i, n)} size="sm" tone="gold" />
-              </YouRow>
-              <PartnerRow name={partnerProfile?.username ?? "partner"}>
+              </AlignedRow>
+              <AlignedRow label={partnerLabel}>
                 <WeekCircles days={theirs[k.kind] ?? EMPTY_WEEK} size="sm" readOnly tone="muted" />
-              </PartnerRow>
+              </AlignedRow>
             </div>
           </div>
         ))}
       </div>
-      <div className="border-t border-border/50 pt-3">
-        <p className="text-xs font-display uppercase tracking-widest mb-2 text-muted-foreground">Dhikr counter</p>
+      <div className="border-t border-border/50 pt-3 space-y-3">
+        <p className="text-xs font-display uppercase tracking-widest text-muted-foreground">Dhikr counter</p>
+
+        {/* Astaghfirullah — full-width prominent */}
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-center">
+          <p className="text-xs font-display tracking-wider text-primary">{ASTAGHFIRULLAH.label}</p>
+          <button
+            onClick={() => incDhikr(ASTAGHFIRULLAH.kind)}
+            className="mt-2 w-full rounded-lg border border-primary/40 bg-card hover:bg-accent/40 py-3 transition-colors"
+          >
+            <p className="font-display text-4xl text-primary tabular-nums">{counts[ASTAGHFIRULLAH.kind] ?? 0}</p>
+            <p className="text-[10px] text-muted-foreground mt-1">tap +1</p>
+          </button>
+          <p className="text-[10px] text-muted-foreground mt-2 truncate">
+            {partnerLabel}:{" "}
+            <span className="text-foreground tabular-nums">{partnerCounts[ASTAGHFIRULLAH.kind] ?? 0}</span>
+          </p>
+        </div>
+
+        {/* The other three side-by-side */}
         <div className="grid grid-cols-3 gap-2">
           {DHIKR_PRESETS.map((d) => (
             <div key={d.kind} className="rounded-xl border border-border bg-card/40 p-2 text-center">
@@ -220,7 +235,7 @@ function AthkarTracker() {
                 <p className="text-[10px] text-muted-foreground">tap +1</p>
               </button>
               <p className="text-[10px] text-muted-foreground mt-1 truncate">
-                @{partnerProfile?.username ?? "partner"}:{" "}
+                {partnerLabel}:{" "}
                 <span className="text-foreground tabular-nums">{partnerCounts[d.kind] ?? 0}</span>
               </p>
             </div>
@@ -331,13 +346,17 @@ function FastingTracker() {
     );
   };
 
+  const partnerLabel = `@${partnerProfile?.username ?? "partner"}`;
+
   return (
     <TrackerCard title="Fasting">
-      <div className="grid grid-cols-2 gap-3">
-        <YouRow><WeekCircles days={days} onToggle={toggle} size="sm" tone="gold" /></YouRow>
-        <PartnerRow name={partnerProfile?.username ?? "partner"}>
+      <div className="space-y-2">
+        <AlignedRow label="You">
+          <WeekCircles days={days} onToggle={toggle} size="sm" tone="gold" />
+        </AlignedRow>
+        <AlignedRow label={partnerLabel}>
           <WeekCircles days={partnerDays} size="sm" readOnly tone="muted" />
-        </PartnerRow>
+        </AlignedRow>
       </div>
     </TrackerCard>
   );
