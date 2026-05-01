@@ -354,10 +354,48 @@ function TodayPage() {
 
   return (
     <div className="space-y-6">
-      <div className="text-center">
+      <div className="text-center relative">
         <h2 className="font-display text-3xl tracking-widest text-primary">TODAY</h2>
         <p className="text-muted-foreground italic mt-1">Your journey at a glance.</p>
+        <button
+          aria-label="Open today log"
+          onClick={() => setTodayLogOpen(true)}
+          className="absolute top-0 right-0 size-8 rounded-full text-muted-foreground/60 hover:text-muted-foreground hover:bg-accent/40 inline-flex items-center justify-center transition-colors"
+        >
+          <Clock className="size-4" />
+        </button>
       </div>
+
+      {/* Today Log sheet */}
+      <Sheet open={todayLogOpen} onOpenChange={(o) => (o ? setTodayLogOpen(true) : closeTodayLog())}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle className="font-display tracking-widest">TODAY LOG</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-3">
+            {todayLogEntries.length === 0 ? (
+              <p className="text-sm italic text-muted-foreground text-center py-12">nothing yet today…</p>
+            ) : (
+              <ul className="space-y-2">
+                {todayLogEntries.map((e, i) => (
+                  <li
+                    key={i}
+                    className="rounded-lg border border-border/60 bg-card/40 px-3 py-2 flex items-center gap-3"
+                  >
+                    <span className="text-xl shrink-0">{e.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm leading-tight truncate">{e.label}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {new Date(e.ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* NC counter card */}
       <div className="parchment-card rounded-2xl p-6 text-center space-y-3 relative">
