@@ -40,6 +40,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [reminderTime, setReminderTime] = useState("21:00");
   const [reminderEnabled, setReminderEnabled] = useState(true);
   const [allowPrivateDeletes, setAllowPrivateDeletes] = useState(false);
+  const [shareLastSeen, setShareLastSeen] = useState(true);
   const [birthday, setBirthday] = useState<string | null>(null);
   const [ncStartDate, setNcStartDate] = useState<string | null>(null);
   const [talkingSince, setTalkingSince] = useState<string | null>(null);
@@ -74,8 +75,30 @@ export function AppShell({ children }: { children: ReactNode }) {
     setReminderEnabled(profile.reminder_enabled ?? true);
     setReminderTime((profile.reminder_time ?? "21:00:00").slice(0, 5));
     setAllowPrivateDeletes(!!journey?.allow_private_deletes);
+    setShareLastSeen((profile as any).share_last_seen ?? true);
     setBirthday((profile as any).birthday ?? null);
   }, [profile, journey?.allow_private_deletes]);
+
+  // Update last_seen_at on mount and on focus/visibility change
+  useEffect(() => {
+    if (!profile?.id) return;
+    const ping = () => {
+      supabase
+        .from("profiles")
+        .update({ last_seen_at: new Date().toISOString() } as any)
+        .eq("id", profile.id)
+        .then(() => undefined);
+    };
+    ping();
+    const onFocus = () => ping();
+    const onVis = () => { if (document.visibilityState === "visible") ping(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [profile?.id]);
 
   useEffect(() => {
     if (!journey) return;
@@ -93,6 +116,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         reminder_time: `${reminderTime}:00`,
         reminder_enabled: reminderEnabled,
         birthday: birthday,
+        share_last_seen: shareLastSeen,
       } as any)
       .eq("id", profile.id);
     if (pErr) return toast.error(pErr.message);
@@ -228,6 +252,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                       <Switch id="allow-private-deletes" checked={allowPrivateDeletes} onCheckedChange={setAllowPrivateDeletes} />
                     </div>
                   )}
+
+                  <div className="flex items-center justify-between rounded-xl border border-border/70 p-4">
+                    <div>
+                      <Label htmlFor="share-last-seen">Share last seen</Label>
+                      <p className="text-[11px] text-muted-foreground">Let your partner see when you last opened the app.</p>
+                    </div>
+                    <Switch id="share-last-seen" checked={shareLastSeen} onCheckedChange={setShareLastSeen} />
+                  </div>
 
                   <div className="rounded-xl border border-border/70 p-4 space-y-4">
                     <p className="font-display text-xs uppercase tracking-widest text-muted-foreground">Birthdays</p>
