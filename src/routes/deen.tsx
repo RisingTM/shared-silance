@@ -330,42 +330,97 @@ function AthkarTracker() {
         <p className="text-xs font-display uppercase tracking-widest text-muted-foreground">Dhikr counter</p>
 
         {/* Astaghfirullah — full-width prominent */}
-        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-center">
-          <p className="text-xs font-display tracking-wider text-primary">{ASTAGHFIRULLAH.label}</p>
-          <button
-            onClick={() => incDhikr(ASTAGHFIRULLAH.kind)}
-            className="mt-2 w-full rounded-lg border border-primary/40 bg-card hover:bg-accent/40 py-3 transition-colors"
-          >
-            <p className="font-display text-4xl text-primary tabular-nums">{counts[ASTAGHFIRULLAH.kind] ?? 0}</p>
-            <p className="text-[10px] text-muted-foreground mt-1">tap +1</p>
-          </button>
-          <p className="text-[10px] text-muted-foreground mt-2 truncate">
-            {partnerLabel}:{" "}
-            <span className="text-foreground tabular-nums">{partnerCounts[ASTAGHFIRULLAH.kind] ?? 0}</span>
-          </p>
-        </div>
+        <DhikrCard
+          kind={ASTAGHFIRULLAH.kind}
+          label={ASTAGHFIRULLAH.label}
+          mine={counts[ASTAGHFIRULLAH.kind] ?? 0}
+          theirs={partnerCounts[ASTAGHFIRULLAH.kind] ?? 0}
+          partnerLabel={partnerLabel}
+          onTap={() => incDhikr(ASTAGHFIRULLAH.kind)}
+          prominent
+        />
 
         {/* The other three side-by-side */}
         <div className="grid grid-cols-3 gap-2">
           {DHIKR_PRESETS.map((d) => (
-            <div key={d.kind} className="rounded-xl border border-border bg-card/40 p-2 text-center">
-              <p className="text-[11px] font-display tracking-wider">{d.label}</p>
-              <button
-                onClick={() => incDhikr(d.kind)}
-                className="mt-1 w-full rounded-lg border border-border bg-card hover:bg-accent/40 py-2 transition-colors"
-              >
-                <p className="font-display text-2xl text-primary tabular-nums">{counts[d.kind] ?? 0}</p>
-                <p className="text-[10px] text-muted-foreground">tap +1</p>
-              </button>
-              <p className="text-[10px] text-muted-foreground mt-1 truncate">
-                {partnerLabel}:{" "}
-                <span className="text-foreground tabular-nums">{partnerCounts[d.kind] ?? 0}</span>
-              </p>
-            </div>
+            <DhikrCard
+              key={d.kind}
+              kind={d.kind}
+              label={d.label}
+              mine={counts[d.kind] ?? 0}
+              theirs={partnerCounts[d.kind] ?? 0}
+              partnerLabel={partnerLabel}
+              onTap={() => incDhikr(d.kind)}
+            />
           ))}
         </div>
       </div>
     </TrackerCard>
+  );
+}
+
+function DhikrCard({
+  label,
+  mine,
+  theirs,
+  partnerLabel,
+  onTap,
+  prominent,
+}: {
+  kind: string;
+  label: string;
+  mine: number;
+  theirs: number;
+  partnerLabel: string;
+  onTap: () => void;
+  prominent?: boolean;
+}) {
+  const youLead = mine > theirs;
+  const theyLead = theirs > mine;
+  const diff = Math.abs(mine - theirs);
+  if (prominent) {
+    return (
+      <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-center">
+        <p className="text-xs font-display tracking-wider text-primary">{label}</p>
+        <button
+          onClick={onTap}
+          className="mt-2 w-full rounded-lg border border-primary/40 bg-card hover:bg-accent/40 py-3 transition-colors"
+        >
+          <p className="font-display text-4xl text-primary tabular-nums inline-flex items-center gap-2">
+            {youLead && <Crown className="size-5 text-amber-500" />}
+            {mine}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-1">tap +1</p>
+          {youLead && diff > 0 && <p className="text-[10px] text-amber-600/80 dark:text-amber-400/80">+{diff} ahead</p>}
+        </button>
+        <p className="text-[10px] text-muted-foreground mt-2 truncate inline-flex items-center gap-1 justify-center w-full">
+          {theyLead && <Crown className="size-3 text-amber-500" />}
+          {partnerLabel}: <span className="text-foreground tabular-nums">{theirs}</span>
+        </p>
+        {theyLead && diff > 0 && <p className="text-[10px] text-muted-foreground/80 mt-0.5">{diff} behind</p>}
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-border bg-card/40 p-2 text-center">
+      <p className="text-[11px] font-display tracking-wider">{label}</p>
+      <button
+        onClick={onTap}
+        className="mt-1 w-full rounded-lg border border-border bg-card hover:bg-accent/40 py-2 transition-colors"
+      >
+        <p className="font-display text-2xl text-primary tabular-nums inline-flex items-center gap-1">
+          {youLead && <Crown className="size-3.5 text-amber-500" />}
+          {mine}
+        </p>
+        <p className="text-[10px] text-muted-foreground">tap +1</p>
+        {youLead && diff > 0 && <p className="text-[9px] text-amber-600/80 dark:text-amber-400/80">+{diff} ahead</p>}
+      </button>
+      <p className="text-[10px] text-muted-foreground mt-1 truncate inline-flex items-center gap-1 justify-center w-full">
+        {theyLead && <Crown className="size-3 text-amber-500" />}
+        {partnerLabel}: <span className="text-foreground tabular-nums">{theirs}</span>
+      </p>
+      {theyLead && diff > 0 && <p className="text-[9px] text-muted-foreground/80">{diff} behind</p>}
+    </div>
   );
 }
 
