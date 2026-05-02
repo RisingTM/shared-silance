@@ -424,54 +424,91 @@ function DhikrCard({
   );
 }
 
+const QURAN_TOTAL = 604;
+
 function QuranTracker() {
   const { user, partnerProfile } = useSession();
   const [page, setPage] = useState(0);
   const [partnerPage, setPartnerPage] = useState(0);
+  const [completions, setCompletions] = useState(0);
+  const [partnerCompletions, setPartnerCompletions] = useState(0);
 
   const load = async () => {
     if (!user) return;
     const ids = [user.id, partnerProfile?.id].filter(Boolean) as string[];
-    const { data } = await supabase.from("deen_quran").select("user_id, current_page").in("user_id", ids);
+    const [{ data }, { data: profs }] = await Promise.all([
+      supabase.from("deen_quran").select("user_id, current_page").in("user_id", ids),
+      supabase.from("profiles").select("id, quran_completions").in("id", ids),
+    ]);
     let mine = 0, theirs = 0;
     (data ?? []).forEach((r: any) => {
       if (r.user_id === user.id) mine = r.current_page ?? 0;
       else theirs = r.current_page ?? 0;
     });
     setPage(mine); setPartnerPage(theirs);
+    let myc = 0, thc = 0;
+    (profs ?? []).forEach((p: any) => {
+      if (p.id === user.id) myc = p.quran_completions ?? 0;
+      else thc = p.quran_completions ?? 0;
+    });
+    setCompletions(myc); setPartnerCompletions(thc);
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [user?.id, partnerProfile?.id]);
 
-  const inc = async () => {
+  const writePage = async (next: number, delta: number) => {
     if (!user) return;
-    const next = page + 1;
-    setPage(next);
     const today = new Date().toISOString().slice(0, 10);
     await supabase.from("deen_quran").upsert(
       { user_id: user.id, current_page: next, updated_at: new Date().toISOString() },
       { onConflict: "user_id" },
     );
-    await supabase.from("deen_quran_log").insert({ user_id: user.id, log_date: today, pages: 1 });
+    await supabase.from("deen_quran_log").insert({ user_id: user.id, log_date: today, pages: delta });
+  };
+
+  const inc = async () => {
+    if (!user) return;
+    let next = page + 1;
+    if (next >= QURAN_TOTAL) {
+      // Complete a read
+      await writePage(QURAN_TOTAL, 1);
+      const newCompletions = completions + 1;
+      await supabase.from("profiles").update({ quran_completions: newCompletions } as any).eq("id", user.id);
+      // Reset
+      await writePage(0, 0);
+      setPage(0);
+      setCompletions(newCompletions);
+      toast.success(`MashaAllah — ${newCompletions} complete read${newCompletions === 1 ? "" : "s"}!`);
+      return;
+    }
+    setPage(next);
+    await writePage(next, 1);
   };
 
   const dec = async () => {
     if (!user || page <= 0) return;
     const next = Math.max(0, page - 1);
     setPage(next);
-    const today = new Date().toISOString().slice(0, 10);
-    await supabase.from("deen_quran").upsert(
-      { user_id: user.id, current_page: next, updated_at: new Date().toISOString() },
-      { onConflict: "user_id" },
-    );
-    await supabase.from("deen_quran_log").insert({ user_id: user.id, log_date: today, pages: -1 });
+    await writePage(next, -1);
   };
+
+  const myPct = Math.min(100, (page / QURAN_TOTAL) * 100);
+  const theirPct = Math.min(100, (partnerPage / QURAN_TOTAL) * 100);
 
   return (
     <TrackerCard title="Quran progress">
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-border bg-card/40 p-3">
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">You</p>
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">You</p>
+            {completions > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-display tracking-wider text-amber-600 dark:text-amber-400">
+                <Trophy className="size-3" /> +{completions}
+              </span>
+            )}
+          </div>
           <p className="font-display text-3xl text-primary tabular-nums mt-1">{page}</p>
+          <p className="text-[10px] text-muted-foreground">Page {page} of {QURAN_TOTAL}</p>
+          <Progress value={myPct} className="mt-2 h-1.5" />
           <div className="mt-2 grid grid-cols-2 gap-2">
             <Button size="sm" onClick={inc} aria-label="Read 1 page">
               <Plus className="size-3" />
@@ -484,16 +521,26 @@ function QuranTracker() {
           </div>
         </div>
         <div className="rounded-xl border border-amber-200/40 dark:border-amber-900/40 bg-amber-200/10 dark:bg-amber-900/10 p-3">
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground truncate">
-            @{partnerProfile?.username ?? "partner"}
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground truncate">
+              @{partnerProfile?.username ?? "partner"}
+            </p>
+            {partnerCompletions > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-display tracking-wider text-amber-600 dark:text-amber-400">
+                <Trophy className="size-3" /> +{partnerCompletions}
+              </span>
+            )}
+          </div>
           <p className="font-display text-3xl text-foreground/80 tabular-nums mt-1">{partnerPage}</p>
+          <p className="text-[10px] text-muted-foreground">Page {partnerPage} of {QURAN_TOTAL}</p>
+          <Progress value={theirPct} className="mt-2 h-1.5" />
           <p className="text-[10px] text-muted-foreground mt-2 italic">read-only</p>
         </div>
       </div>
     </TrackerCard>
   );
 }
+
 
 function FastingTracker() {
   const { user, partnerProfile } = useSession();
