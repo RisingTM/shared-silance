@@ -579,59 +579,58 @@ function TodayPage() {
         </div>
       </div>
 
-      {/* Side-by-side updates */}
-      <div className="grid grid-cols-2 gap-3">
-        <UpdateCard
-          label="You"
-          name={profile?.display_name ?? profile?.username ?? "You"}
-          row={mine}
-          fresh={!!mine && Date.now() - new Date(mine.created_at).getTime() < STATUS_COOLDOWN_MS}
-          waitingText="Not yet today"
-        />
-        <UpdateCard
-          label={`@${partnerProfile?.username ?? "partner"}`}
-          name={partnerProfile?.display_name ?? partnerProfile?.username ?? "Them"}
-          row={theirsFresh ? theirs : null}
-          fresh={theirsFresh}
-          waitingText={`waiting for @${partnerProfile?.username ?? "partner"}…`}
-        />
-      </div>
-
-      {/* 16-option update grid */}
-      <div className="parchment-card rounded-2xl p-5">
-        <h3 className="font-display text-sm uppercase tracking-widest text-muted-foreground text-center mb-4">
-          {cooldownRemaining ? `Next update in ${cooldownRemaining}` : "How are you, right now?"}
-        </h3>
-        <div className="grid grid-cols-2 gap-2">
-          {STATUS_OPTIONS.map((s) => {
-            const selected = pendingStatus === s.key;
-            return (
-              <button
-                key={s.key}
-                disabled={submitting || !!cooldownRemaining}
-                onClick={() => setPendingStatus(s.key)}
-                className={[
-                  "flex items-center gap-2 rounded-xl border bg-card hover:bg-accent/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors p-3 text-left",
-                  selected ? "border-primary bg-primary/10" : "border-border",
-                ].join(" ")}
-              >
-                <span className="text-xl shrink-0">{s.emoji}</span>
-                <span className="text-xs leading-tight">{s.label}</span>
-              </button>
-            );
-          })}
+      {/* Side-by-side updates with centered ping in between */}
+      <div className="parchment-card rounded-2xl p-4 sm:p-5 space-y-4">
+        <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
+          <UpdateCard
+            label="You"
+            name={profile?.display_name ?? profile?.username ?? "You"}
+            row={mine}
+            fresh={!!mine && Date.now() - new Date(mine.created_at).getTime() < STATUS_COOLDOWN_MS}
+            waitingText="Not yet today"
+          />
+          <PingRing
+            canPing={canPing}
+            msLeft={pingMsLeft}
+            totalMs={PING_COOLDOWN_MS}
+            onClick={sendThinkingPing}
+          />
+          <UpdateCard
+            label={`@${partnerProfile?.username ?? "partner"}`}
+            name={partnerProfile?.display_name ?? partnerProfile?.username ?? "Them"}
+            row={theirsFresh ? theirs : null}
+            fresh={theirsFresh}
+            waitingText={`waiting for @${partnerProfile?.username ?? "partner"}…`}
+            lastSeen={(partnerProfile as any)?.share_last_seen !== false ? (partnerProfile as any)?.last_seen_at ?? null : null}
+          />
         </div>
-        <Button
-          className="w-full mt-4"
-          onClick={submitStatus}
-          disabled={!pendingStatus || submitting || !!cooldownRemaining}
-        >
-          {submitting ? "Sending…" : "Confirm update"}
-        </Button>
-        <Button variant="outline" className="w-full mt-2" onClick={sendThinkingPing} disabled={!canPing}>
-          <Heart className="size-4" />
-          {canPing ? "Thinking of you" : `Available again in ${formatRemaining(pingMsLeft)}`}
-        </Button>
+
+        {/* 6h progress line */}
+        <UpdateProgressLine
+          lastUpdateMs={mine ? new Date(mine.created_at).getTime() : null}
+          windowMs={STATUS_COOLDOWN_MS}
+        />
+
+        {/* Picker — collapsed when within cooldown, expandable bottom sheet */}
+        {!cooldownRemaining ? (
+          <PickerInline
+            pendingStatus={pendingStatus}
+            setPendingStatus={setPendingStatus}
+            onConfirm={submitStatus}
+            submitting={submitting}
+          />
+        ) : (
+          <PickerCollapsed
+            pendingStatus={pendingStatus}
+            setPendingStatus={setPendingStatus}
+            onConfirm={submitStatus}
+            submitting={submitting}
+          />
+        )}
+
+        <p className="text-[11px] text-muted-foreground text-center italic">
+          {canPing ? " " : `Thinking-of-you available again in ${formatRemaining(pingMsLeft)}`}
+        </p>
       </div>
 
       <Dialog>
@@ -667,16 +666,18 @@ function UpdateCard({
   row,
   fresh,
   waitingText,
+  lastSeen,
 }: {
   label: string;
   name: string;
   row: Row | null;
   fresh: boolean;
   waitingText: string;
+  lastSeen?: string | null;
 }) {
   const m = row ? statusMeta(row.status) : null;
   return (
-    <div className="parchment-card rounded-2xl p-4 text-center min-h-[140px] flex flex-col items-center justify-center">
+    <div className="parchment-card rounded-2xl p-3 sm:p-4 text-center min-h-[140px] flex flex-col items-center justify-center">
       <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">{label}</p>
       <p className="font-display text-xs mt-1 truncate max-w-full">{name}</p>
       {row && m ? (
@@ -696,6 +697,201 @@ function UpdateCard({
       {!fresh && row && (
         <p className="text-[10px] text-muted-foreground/70 mt-1 italic">over 6h ago</p>
       )}
+      {lastSeen !== undefined && lastSeen && (
+        <p className="text-[10px] text-muted-foreground/70 mt-1.5 italic">{formatLastSeen(lastSeen)}</p>
+      )}
     </div>
+  );
+}
+
+function formatLastSeen(iso: string): string {
+  const ts = new Date(iso).getTime();
+  const now = Date.now();
+  const diff = now - ts;
+  const day = 86400000;
+  if (diff < 0) return "";
+  if (diff > day) {
+    const days = Math.floor(diff / day);
+    return `last seen ${days} day${days === 1 ? "" : "s"} ago`;
+  }
+  // Within 24h: show today / yesterday with time
+  const d = new Date(ts);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+  const dayLabel = d.getTime() >= today.getTime() ? "today" : d.getTime() >= yesterday.getTime() ? "yesterday" : "";
+  const timeStr = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toLowerCase();
+  return `last seen ${dayLabel ? dayLabel + " at " : ""}${timeStr}`;
+}
+
+function UpdateProgressLine({ lastUpdateMs, windowMs }: { lastUpdateMs: number | null; windowMs: number }) {
+  const [, setT] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setT((x) => x + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const elapsed = lastUpdateMs ? Date.now() - lastUpdateMs : windowMs;
+  const pct = Math.max(0, Math.min(100, (elapsed / windowMs) * 100));
+  const ready = pct >= 100;
+  return (
+    <div className="relative h-[3px] w-full rounded-full bg-muted/50 overflow-visible">
+      <div
+        className={[
+          "absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-primary/60 to-primary transition-[width] duration-700 ease-out",
+          ready && "animate-pulse",
+        ].filter(Boolean).join(" ")}
+        style={{ width: `${pct}%`, boxShadow: "0 0 8px hsl(var(--primary) / 0.6)" }}
+      />
+    </div>
+  );
+}
+
+function PingRing({
+  canPing,
+  msLeft,
+  totalMs,
+  onClick,
+}: {
+  canPing: boolean;
+  msLeft: number;
+  totalMs: number;
+  onClick: () => void;
+}) {
+  const [, setT] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setT((x) => x + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const fraction = canPing ? 1 : Math.max(0, Math.min(1, 1 - msLeft / totalMs));
+  const size = 56;
+  const stroke = 3;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className="flex flex-col items-center justify-center">
+      <button
+        onClick={onClick}
+        disabled={!canPing}
+        aria-label="Send thinking of you"
+        className="relative inline-flex items-center justify-center disabled:opacity-60"
+        style={{ width: size, height: size }}
+      >
+        <svg width={size} height={size} className="absolute inset-0 -rotate-90">
+          <circle cx={size / 2} cy={size / 2} r={r} stroke="hsl(var(--muted-foreground) / 0.25)" strokeWidth={stroke} fill="none" />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke="hsl(var(--primary))"
+            strokeWidth={stroke}
+            fill="none"
+            strokeDasharray={c}
+            strokeDashoffset={c * (1 - fraction)}
+            strokeLinecap="round"
+            style={{ transition: "stroke-dashoffset 1s linear" }}
+          />
+        </svg>
+        <span className="relative inline-flex items-center justify-center size-9 rounded-full bg-primary/10 border border-primary/40 text-primary">
+          <Heart className={["size-4", canPing && "fill-current"].filter(Boolean).join(" ")} />
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function PickerInline({
+  pendingStatus,
+  setPendingStatus,
+  onConfirm,
+  submitting,
+}: {
+  pendingStatus: StatusKey | null;
+  setPendingStatus: (k: StatusKey | null) => void;
+  onConfirm: () => void;
+  submitting: boolean;
+}) {
+  const meta = pendingStatus ? statusMeta(pendingStatus) : null;
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        {STATUS_OPTIONS.map((s) => {
+          const selected = pendingStatus === s.key;
+          return (
+            <button
+              key={s.key}
+              disabled={submitting}
+              onClick={() => setPendingStatus(s.key)}
+              className={[
+                "flex items-center gap-2 rounded-xl border bg-card hover:bg-accent/40 disabled:opacity-50 transition-colors p-3 text-left",
+                selected ? "border-primary bg-primary/10" : "border-border",
+              ].join(" ")}
+            >
+              <span className="text-xl shrink-0">{s.emoji}</span>
+              <span className="text-xs leading-tight">{s.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      <Button className="w-full" onClick={onConfirm} disabled={!pendingStatus || submitting}>
+        {submitting ? "Sending…" : meta ? `Send — ${meta.label} ${meta.emoji}` : "Confirm update"}
+      </Button>
+    </div>
+  );
+}
+
+function PickerCollapsed({
+  pendingStatus,
+  setPendingStatus,
+  onConfirm,
+  submitting,
+}: {
+  pendingStatus: StatusKey | null;
+  setPendingStatus: (k: StatusKey | null) => void;
+  onConfirm: () => void;
+  submitting: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const meta = pendingStatus ? statusMeta(pendingStatus) : null;
+  const close = () => { setOpen(false); setPendingStatus(null); };
+  const handleConfirm = async () => {
+    await onConfirm();
+    setOpen(false);
+  };
+  return (
+    <>
+      <Button variant="outline" size="sm" className="w-full" onClick={() => setOpen(true)}>
+        Send a new update
+      </Button>
+      <Sheet open={open} onOpenChange={(o) => (o ? setOpen(true) : close())}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="font-display tracking-widest">HOW ARE YOU, RIGHT NOW?</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              {STATUS_OPTIONS.map((s) => {
+                const selected = pendingStatus === s.key;
+                return (
+                  <button
+                    key={s.key}
+                    disabled={submitting}
+                    onClick={() => setPendingStatus(s.key)}
+                    className={[
+                      "flex items-center gap-2 rounded-xl border bg-card hover:bg-accent/40 transition-colors p-3 text-left",
+                      selected ? "border-primary bg-primary/10" : "border-border",
+                    ].join(" ")}
+                  >
+                    <span className="text-xl shrink-0">{s.emoji}</span>
+                    <span className="text-xs leading-tight">{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <Button className="w-full" onClick={handleConfirm} disabled={!pendingStatus || submitting}>
+              {submitting ? "Sending…" : meta ? `Send — ${meta.label} ${meta.emoji}` : "Confirm update"}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

@@ -461,11 +461,14 @@ export type Database = {
           id: string
           is_claimed: boolean
           journey_id: string
+          last_seen_at: string | null
           must_set_password: boolean
           push_endpoint: string | null
+          quran_completions: number
           reminder_enabled: boolean
           reminder_time: string
           role: Database["public"]["Enums"]["user_role"]
+          share_last_seen: boolean
           username: string
         }
         Insert: {
@@ -477,11 +480,14 @@ export type Database = {
           id: string
           is_claimed?: boolean
           journey_id: string
+          last_seen_at?: string | null
           must_set_password?: boolean
           push_endpoint?: string | null
+          quran_completions?: number
           reminder_enabled?: boolean
           reminder_time?: string
           role: Database["public"]["Enums"]["user_role"]
+          share_last_seen?: boolean
           username: string
         }
         Update: {
@@ -493,11 +499,14 @@ export type Database = {
           id?: string
           is_claimed?: boolean
           journey_id?: string
+          last_seen_at?: string | null
           must_set_password?: boolean
           push_endpoint?: string | null
+          quran_completions?: number
           reminder_enabled?: boolean
           reminder_time?: string
           role?: Database["public"]["Enums"]["user_role"]
+          share_last_seen?: boolean
           username?: string
         }
         Relationships: [

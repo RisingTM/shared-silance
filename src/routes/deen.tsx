@@ -4,11 +4,13 @@ import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
 import { duaForDate } from "@/lib/dua";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Minus, Plus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, Crown, Minus, Plus, Trophy, X } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Progress } from "@/components/ui/progress";
 import { WeekCircles, weekRangeLabel, weekStartSaturday } from "@/components/WeekCircles";
 import { toast } from "sonner";
 
@@ -40,17 +42,138 @@ function DeenPage() {
   const ws = useMemo(() => weekStartSaturday(), []);
   return (
     <div className="space-y-6">
-      <div className="text-center">
+      <div className="text-center relative">
         <h2 className="font-display text-3xl tracking-widest text-primary">DEEN</h2>
         <p className="text-muted-foreground italic mt-1">{weekRangeLabel(ws)}</p>
+        <DeenLogButton />
       </div>
 
       <PrayerTracker />
+      <FastingTracker />
       <AthkarTracker />
       <QuranTracker />
-      <FastingTracker />
       <DuaSection />
     </div>
+  );
+}
+
+function DeenLogButton() {
+  const { user, partnerProfile } = useSession();
+  const [open, setOpen] = useState(false);
+  const [summary, setSummary] = useState<{ key: string; label: string }[]>([]);
+  const lsKey = user ? `silance_deen_last_viewed:${user.id}` : "";
+
+  const buildSummary = async (autoOpen: boolean) => {
+    if (!user || !partnerProfile?.id) return;
+    const stored = window.localStorage.getItem(lsKey);
+    const sinceISO = stored ? new Date(Number(stored)).toISOString() : new Date(Date.now() - 7 * 86400000).toISOString();
+
+    const [
+      { data: dhikr },
+      { data: quran },
+      { data: prayers },
+      { data: athkar },
+      { data: fasting },
+    ] = await Promise.all([
+      supabase.from("deen_quran_log").select("pages, created_at").eq("user_id", partnerProfile.id).gte("created_at", sinceISO),
+      supabase.from("deen_quran_log").select("pages, created_at").eq("user_id", partnerProfile.id).gte("created_at", sinceISO),
+      supabase.from("deen_prayers").select("prayer, days, updated_at").eq("user_id", partnerProfile.id).gte("updated_at", sinceISO),
+      supabase.from("deen_athkar").select("kind, days, updated_at").eq("user_id", partnerProfile.id).gte("updated_at", sinceISO),
+      supabase.from("deen_fasting").select("days, updated_at").eq("user_id", partnerProfile.id).gte("updated_at", sinceISO),
+    ]);
+
+    // Dhikr deltas — compare current count vs at-last-view by reading dhikr table snapshots
+    // Simpler: report current totals if updated since last view
+    const { data: dhikrNow } = await supabase
+      .from("deen_dhikr")
+      .select("kind, count, updated_at")
+      .eq("user_id", partnerProfile.id)
+      .gte("updated_at", sinceISO);
+
+    const items: { key: string; label: string }[] = [];
+
+    if (dhikrNow && dhikrNow.length) {
+      const labelMap: Record<string, string> = {
+        astaghfirullah: "Astaghfirullah",
+        subhanallah: "SubhanAllah",
+        alhamdulillah: "Alhamdulillah",
+        allahuakbar: "Allahu Akbar",
+      };
+      const parts = dhikrNow
+        .map((r: any) => `${labelMap[r.kind] ?? r.kind} (${r.count})`)
+        .join(", ");
+      if (parts) items.push({ key: "dhikr", label: `Dhikr — ${parts}` });
+    }
+
+    const quranPages = (quran ?? []).reduce((s: number, r: any) => s + (r.pages ?? 0), 0);
+    if (quranPages > 0) items.push({ key: "quran", label: `Quran — +${quranPages} page${quranPages === 1 ? "" : "s"}` });
+
+    if (prayers && prayers.length) {
+      const names = prayers.map((p: any) => p.prayer).join(", ");
+      items.push({ key: "prayers", label: `Prayers — updated ${names}` });
+    }
+
+    if (athkar && athkar.length) {
+      const names = athkar.map((a: any) => a.kind).join(", ");
+      items.push({ key: "athkar", label: `Athkar — ${names}` });
+    }
+
+    if (fasting && fasting.length) {
+      items.push({ key: "fasting", label: `Fasting — updated this week` });
+    }
+
+    setSummary(items);
+
+    if (!stored) {
+      window.localStorage.setItem(lsKey, String(Date.now()));
+      return;
+    }
+    if (autoOpen && items.length > 0) setOpen(true);
+  };
+
+  useEffect(() => {
+    buildSummary(true).catch(() => undefined);
+    /* eslint-disable-next-line */
+  }, [user?.id, partnerProfile?.id]);
+
+  const close = () => {
+    setOpen(false);
+    if (lsKey) window.localStorage.setItem(lsKey, String(Date.now()));
+  };
+
+  if (!partnerProfile) return null;
+
+  return (
+    <>
+      <button
+        aria-label="Open deen log"
+        onClick={() => setOpen(true)}
+        className="absolute top-0 right-0 size-8 rounded-full text-muted-foreground/60 hover:text-muted-foreground hover:bg-accent/40 inline-flex items-center justify-center transition-colors"
+      >
+        <Clock className="size-4" />
+      </button>
+      <Sheet open={open} onOpenChange={(o) => (o ? setOpen(true) : close())}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle className="font-display tracking-widest">DEEN LOG</SheetTitle>
+          </SheetHeader>
+          <p className="text-[11px] text-muted-foreground mt-2 italic">
+            What @{partnerProfile.username} has done since you last visited.
+          </p>
+          <div className="mt-5 space-y-2">
+            {summary.length === 0 ? (
+              <p className="text-sm italic text-muted-foreground text-center py-12">nothing new yet…</p>
+            ) : (
+              summary.map((s) => (
+                <div key={s.key} className="rounded-lg border border-border/60 bg-card/40 px-3 py-2 text-sm">
+                  {s.label}
+                </div>
+              ))
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
 
@@ -207,38 +330,28 @@ function AthkarTracker() {
         <p className="text-xs font-display uppercase tracking-widest text-muted-foreground">Dhikr counter</p>
 
         {/* Astaghfirullah — full-width prominent */}
-        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-center">
-          <p className="text-xs font-display tracking-wider text-primary">{ASTAGHFIRULLAH.label}</p>
-          <button
-            onClick={() => incDhikr(ASTAGHFIRULLAH.kind)}
-            className="mt-2 w-full rounded-lg border border-primary/40 bg-card hover:bg-accent/40 py-3 transition-colors"
-          >
-            <p className="font-display text-4xl text-primary tabular-nums">{counts[ASTAGHFIRULLAH.kind] ?? 0}</p>
-            <p className="text-[10px] text-muted-foreground mt-1">tap +1</p>
-          </button>
-          <p className="text-[10px] text-muted-foreground mt-2 truncate">
-            {partnerLabel}:{" "}
-            <span className="text-foreground tabular-nums">{partnerCounts[ASTAGHFIRULLAH.kind] ?? 0}</span>
-          </p>
-        </div>
+        <DhikrCard
+          kind={ASTAGHFIRULLAH.kind}
+          label={ASTAGHFIRULLAH.label}
+          mine={counts[ASTAGHFIRULLAH.kind] ?? 0}
+          theirs={partnerCounts[ASTAGHFIRULLAH.kind] ?? 0}
+          partnerLabel={partnerLabel}
+          onTap={() => incDhikr(ASTAGHFIRULLAH.kind)}
+          prominent
+        />
 
         {/* The other three side-by-side */}
         <div className="grid grid-cols-3 gap-2">
           {DHIKR_PRESETS.map((d) => (
-            <div key={d.kind} className="rounded-xl border border-border bg-card/40 p-2 text-center">
-              <p className="text-[11px] font-display tracking-wider">{d.label}</p>
-              <button
-                onClick={() => incDhikr(d.kind)}
-                className="mt-1 w-full rounded-lg border border-border bg-card hover:bg-accent/40 py-2 transition-colors"
-              >
-                <p className="font-display text-2xl text-primary tabular-nums">{counts[d.kind] ?? 0}</p>
-                <p className="text-[10px] text-muted-foreground">tap +1</p>
-              </button>
-              <p className="text-[10px] text-muted-foreground mt-1 truncate">
-                {partnerLabel}:{" "}
-                <span className="text-foreground tabular-nums">{partnerCounts[d.kind] ?? 0}</span>
-              </p>
-            </div>
+            <DhikrCard
+              key={d.kind}
+              kind={d.kind}
+              label={d.label}
+              mine={counts[d.kind] ?? 0}
+              theirs={partnerCounts[d.kind] ?? 0}
+              partnerLabel={partnerLabel}
+              onTap={() => incDhikr(d.kind)}
+            />
           ))}
         </div>
       </div>
@@ -246,54 +359,156 @@ function AthkarTracker() {
   );
 }
 
+function DhikrCard({
+  label,
+  mine,
+  theirs,
+  partnerLabel,
+  onTap,
+  prominent,
+}: {
+  kind: string;
+  label: string;
+  mine: number;
+  theirs: number;
+  partnerLabel: string;
+  onTap: () => void;
+  prominent?: boolean;
+}) {
+  const youLead = mine > theirs;
+  const theyLead = theirs > mine;
+  const diff = Math.abs(mine - theirs);
+  if (prominent) {
+    return (
+      <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-center">
+        <p className="text-xs font-display tracking-wider text-primary">{label}</p>
+        <button
+          onClick={onTap}
+          className="mt-2 w-full rounded-lg border border-primary/40 bg-card hover:bg-accent/40 py-3 transition-colors"
+        >
+          <p className="font-display text-4xl text-primary tabular-nums inline-flex items-center gap-2">
+            {youLead && <Crown className="size-5 text-amber-500" />}
+            {mine}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-1">tap +1</p>
+          {youLead && diff > 0 && <p className="text-[10px] text-amber-600/80 dark:text-amber-400/80">+{diff} ahead</p>}
+        </button>
+        <p className="text-[10px] text-muted-foreground mt-2 truncate inline-flex items-center gap-1 justify-center w-full">
+          {theyLead && <Crown className="size-3 text-amber-500" />}
+          {partnerLabel}: <span className="text-foreground tabular-nums">{theirs}</span>
+        </p>
+        {theyLead && diff > 0 && <p className="text-[10px] text-muted-foreground/80 mt-0.5">{diff} behind</p>}
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-border bg-card/40 p-2 text-center">
+      <p className="text-[11px] font-display tracking-wider">{label}</p>
+      <button
+        onClick={onTap}
+        className="mt-1 w-full rounded-lg border border-border bg-card hover:bg-accent/40 py-2 transition-colors"
+      >
+        <p className="font-display text-2xl text-primary tabular-nums inline-flex items-center gap-1">
+          {youLead && <Crown className="size-3.5 text-amber-500" />}
+          {mine}
+        </p>
+        <p className="text-[10px] text-muted-foreground">tap +1</p>
+        {youLead && diff > 0 && <p className="text-[9px] text-amber-600/80 dark:text-amber-400/80">+{diff} ahead</p>}
+      </button>
+      <p className="text-[10px] text-muted-foreground mt-1 truncate inline-flex items-center gap-1 justify-center w-full">
+        {theyLead && <Crown className="size-3 text-amber-500" />}
+        {partnerLabel}: <span className="text-foreground tabular-nums">{theirs}</span>
+      </p>
+      {theyLead && diff > 0 && <p className="text-[9px] text-muted-foreground/80">{diff} behind</p>}
+    </div>
+  );
+}
+
+const QURAN_TOTAL = 604;
+
 function QuranTracker() {
   const { user, partnerProfile } = useSession();
   const [page, setPage] = useState(0);
   const [partnerPage, setPartnerPage] = useState(0);
+  const [completions, setCompletions] = useState(0);
+  const [partnerCompletions, setPartnerCompletions] = useState(0);
 
   const load = async () => {
     if (!user) return;
     const ids = [user.id, partnerProfile?.id].filter(Boolean) as string[];
-    const { data } = await supabase.from("deen_quran").select("user_id, current_page").in("user_id", ids);
+    const [{ data }, { data: profs }] = await Promise.all([
+      supabase.from("deen_quran").select("user_id, current_page").in("user_id", ids),
+      supabase.from("profiles").select("id, quran_completions").in("id", ids),
+    ]);
     let mine = 0, theirs = 0;
     (data ?? []).forEach((r: any) => {
       if (r.user_id === user.id) mine = r.current_page ?? 0;
       else theirs = r.current_page ?? 0;
     });
     setPage(mine); setPartnerPage(theirs);
+    let myc = 0, thc = 0;
+    (profs ?? []).forEach((p: any) => {
+      if (p.id === user.id) myc = p.quran_completions ?? 0;
+      else thc = p.quran_completions ?? 0;
+    });
+    setCompletions(myc); setPartnerCompletions(thc);
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [user?.id, partnerProfile?.id]);
 
-  const inc = async () => {
+  const writePage = async (next: number, delta: number) => {
     if (!user) return;
-    const next = page + 1;
-    setPage(next);
     const today = new Date().toISOString().slice(0, 10);
     await supabase.from("deen_quran").upsert(
       { user_id: user.id, current_page: next, updated_at: new Date().toISOString() },
       { onConflict: "user_id" },
     );
-    await supabase.from("deen_quran_log").insert({ user_id: user.id, log_date: today, pages: 1 });
+    await supabase.from("deen_quran_log").insert({ user_id: user.id, log_date: today, pages: delta });
+  };
+
+  const inc = async () => {
+    if (!user) return;
+    let next = page + 1;
+    if (next >= QURAN_TOTAL) {
+      // Complete a read
+      await writePage(QURAN_TOTAL, 1);
+      const newCompletions = completions + 1;
+      await supabase.from("profiles").update({ quran_completions: newCompletions } as any).eq("id", user.id);
+      // Reset
+      await writePage(0, 0);
+      setPage(0);
+      setCompletions(newCompletions);
+      toast.success(`MashaAllah — ${newCompletions} complete read${newCompletions === 1 ? "" : "s"}!`);
+      return;
+    }
+    setPage(next);
+    await writePage(next, 1);
   };
 
   const dec = async () => {
     if (!user || page <= 0) return;
     const next = Math.max(0, page - 1);
     setPage(next);
-    const today = new Date().toISOString().slice(0, 10);
-    await supabase.from("deen_quran").upsert(
-      { user_id: user.id, current_page: next, updated_at: new Date().toISOString() },
-      { onConflict: "user_id" },
-    );
-    await supabase.from("deen_quran_log").insert({ user_id: user.id, log_date: today, pages: -1 });
+    await writePage(next, -1);
   };
+
+  const myPct = Math.min(100, (page / QURAN_TOTAL) * 100);
+  const theirPct = Math.min(100, (partnerPage / QURAN_TOTAL) * 100);
 
   return (
     <TrackerCard title="Quran progress">
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-border bg-card/40 p-3">
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">You</p>
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">You</p>
+            {completions > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-display tracking-wider text-amber-600 dark:text-amber-400">
+                <Trophy className="size-3" /> +{completions}
+              </span>
+            )}
+          </div>
           <p className="font-display text-3xl text-primary tabular-nums mt-1">{page}</p>
+          <p className="text-[10px] text-muted-foreground">Page {page} of {QURAN_TOTAL}</p>
+          <Progress value={myPct} className="mt-2 h-1.5" />
           <div className="mt-2 grid grid-cols-2 gap-2">
             <Button size="sm" onClick={inc} aria-label="Read 1 page">
               <Plus className="size-3" />
@@ -306,16 +521,26 @@ function QuranTracker() {
           </div>
         </div>
         <div className="rounded-xl border border-amber-200/40 dark:border-amber-900/40 bg-amber-200/10 dark:bg-amber-900/10 p-3">
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground truncate">
-            @{partnerProfile?.username ?? "partner"}
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground truncate">
+              @{partnerProfile?.username ?? "partner"}
+            </p>
+            {partnerCompletions > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-display tracking-wider text-amber-600 dark:text-amber-400">
+                <Trophy className="size-3" /> +{partnerCompletions}
+              </span>
+            )}
+          </div>
           <p className="font-display text-3xl text-foreground/80 tabular-nums mt-1">{partnerPage}</p>
+          <p className="text-[10px] text-muted-foreground">Page {partnerPage} of {QURAN_TOTAL}</p>
+          <Progress value={theirPct} className="mt-2 h-1.5" />
           <p className="text-[10px] text-muted-foreground mt-2 italic">read-only</p>
         </div>
       </div>
     </TrackerCard>
   );
 }
+
 
 function FastingTracker() {
   const { user, partnerProfile } = useSession();
