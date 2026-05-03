@@ -21,7 +21,17 @@ import {
   Upload,
   ChevronLeft,
   Lock,
+  Images,
+  ListChecks,
+  GraduationCap,
+  Heart,
+  CalendarDays,
 } from "lucide-react";
+import { UsGallery } from "@/components/sanctuary/UsGallery";
+import { UsHabits } from "@/components/sanctuary/UsHabits";
+import { UsStudying } from "@/components/sanctuary/UsStudying";
+import { UsFavourites } from "@/components/sanctuary/UsFavourites";
+import { UsCheckinCalendar } from "@/components/sanctuary/UsCheckinCalendar";
 import { toast } from "sonner";
 import { decryptAuto, encryptAuto } from "@/lib/crypto";
 import { getUserEncKey } from "@/lib/enc-key";
@@ -37,12 +47,28 @@ export const Route = createFileRoute("/private")({
   ),
 });
 
-type SectionKey = "journal" | "unsent" | "goals";
+type SectionKey =
+  | "journal"
+  | "unsent"
+  | "goals"
+  | "us-gallery"
+  | "us-habits"
+  | "us-studying"
+  | "us-favourites"
+  | "us-checkin";
 
 const CARDS: { k: SectionKey; label: string; Icon: typeof BookOpen }[] = [
   { k: "journal", label: "Journal", Icon: BookOpen },
   { k: "unsent", label: "Unsent Thoughts", Icon: MessageSquareOff },
   { k: "goals", label: "Goals", Icon: Target },
+];
+
+const US_CARDS: { k: SectionKey; label: string; Icon: typeof BookOpen }[] = [
+  { k: "us-gallery", label: "Gallery", Icon: Images },
+  { k: "us-habits", label: "Habits", Icon: ListChecks },
+  { k: "us-studying", label: "Studying", Icon: GraduationCap },
+  { k: "us-favourites", label: "Favourites", Icon: Heart },
+  { k: "us-checkin", label: "Check-in", Icon: CalendarDays },
 ];
 
 function PrivatePage() {
@@ -59,6 +85,11 @@ function PrivatePage() {
         {open === "journal" && <Journal canDelete={canDelete} />}
         {open === "unsent" && <Unsent canDelete={canDelete} />}
         {open === "goals" && <Goals canDelete={canDelete} />}
+        {open === "us-gallery" && <UsGallery />}
+        {open === "us-habits" && <UsHabits />}
+        {open === "us-studying" && <UsStudying />}
+        {open === "us-favourites" && <UsFavourites />}
+        {open === "us-checkin" && <UsCheckinCalendar />}
       </div>
     );
   }
@@ -84,6 +115,23 @@ function PrivatePage() {
       <p className="text-xs text-muted-foreground text-center">
         <Lock className="inline size-3" /> Entries are encrypted on your device.
       </p>
+
+      <div className="text-center pt-4">
+        <h3 className="font-display text-2xl tracking-widest text-primary">US</h3>
+        <p className="text-muted-foreground italic mt-1 text-sm">Things we share, just the two of us.</p>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {US_CARDS.map(({ k, label, Icon }) => (
+          <button
+            key={k}
+            onClick={() => setOpen(k)}
+            className="parchment-card rounded-2xl p-4 flex flex-col items-center justify-center gap-2 hover:bg-accent/30 transition-colors min-h-[110px]"
+          >
+            <Icon className="size-6 text-primary" />
+            <span className="font-display text-[11px] uppercase tracking-widest text-center leading-tight">{label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
