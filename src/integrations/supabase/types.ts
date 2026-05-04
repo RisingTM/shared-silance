@@ -469,6 +469,8 @@ export type Database = {
           reminder_time: string
           role: Database["public"]["Enums"]["user_role"]
           share_last_seen: boolean
+          study_break_duration_default: number
+          study_session_duration_default: number
           username: string
         }
         Insert: {
@@ -488,6 +490,8 @@ export type Database = {
           reminder_time?: string
           role: Database["public"]["Enums"]["user_role"]
           share_last_seen?: boolean
+          study_break_duration_default?: number
+          study_session_duration_default?: number
           username: string
         }
         Update: {
@@ -507,6 +511,8 @@ export type Database = {
           reminder_time?: string
           role?: Database["public"]["Enums"]["user_role"]
           share_last_seen?: boolean
+          study_break_duration_default?: number
+          study_session_duration_default?: number
           username?: string
         }
         Relationships: [
@@ -590,6 +596,114 @@ export type Database = {
           id?: string
           note?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      study_achievements: {
+        Row: {
+          achievement_key: string
+          earned_at: string
+          id: string
+          journey_id: string
+          user_id: string
+        }
+        Insert: {
+          achievement_key: string
+          earned_at?: string
+          id?: string
+          journey_id: string
+          user_id: string
+        }
+        Update: {
+          achievement_key?: string
+          earned_at?: string
+          id?: string
+          journey_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      study_ratings: {
+        Row: {
+          id: string
+          item_key: string
+          journey_id: string
+          rating: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          item_key: string
+          journey_id: string
+          rating: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          item_key?: string
+          journey_id?: string
+          rating?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      study_sessions: {
+        Row: {
+          created_at: string
+          duration_seconds: number
+          ended_at: string
+          id: string
+          journey_id: string
+          started_at: string
+          subject_key: string | null
+          subject_name: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_seconds: number
+          ended_at: string
+          id?: string
+          journey_id: string
+          started_at: string
+          subject_key?: string | null
+          subject_name?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_seconds?: number
+          ended_at?: string
+          id?: string
+          journey_id?: string
+          started_at?: string
+          subject_key?: string | null
+          subject_name?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      study_syllabus: {
+        Row: {
+          content: Json
+          imported_at: string
+          imported_by: string | null
+          journey_id: string
+        }
+        Insert: {
+          content?: Json
+          imported_at?: string
+          imported_by?: string | null
+          journey_id: string
+        }
+        Update: {
+          content?: Json
+          imported_at?: string
+          imported_by?: string | null
+          journey_id?: string
         }
         Relationships: []
       }

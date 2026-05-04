@@ -10,6 +10,7 @@ import {
   daysAndHoursFromMs,
   daysBetween,
   ncElapsedMs,
+  STATUS_GROUPS,
   statusMeta,
   type StatusKey,
 } from "@/lib/statuses";
@@ -812,28 +813,53 @@ function PickerInline({
   const meta = pendingStatus ? statusMeta(pendingStatus) : null;
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2">
-        {STATUS_OPTIONS.map((s) => {
-          const selected = pendingStatus === s.key;
-          return (
-            <button
-              key={s.key}
-              disabled={submitting}
-              onClick={() => setPendingStatus(s.key)}
-              className={[
-                "flex items-center gap-2 rounded-xl border bg-card hover:bg-accent/40 disabled:opacity-50 transition-colors p-3 text-left",
-                selected ? "border-primary bg-primary/10" : "border-border",
-              ].join(" ")}
-            >
-              <span className="text-xl shrink-0">{s.emoji}</span>
-              <span className="text-xs leading-tight">{s.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      <GroupedOptions pendingStatus={pendingStatus} setPendingStatus={setPendingStatus} submitting={submitting} />
       <Button className="w-full" onClick={onConfirm} disabled={!pendingStatus || submitting}>
         {submitting ? "Sending…" : meta ? `Send — ${meta.label} ${meta.emoji}` : "Confirm update"}
       </Button>
+    </div>
+  );
+}
+
+function GroupedOptions({
+  pendingStatus,
+  setPendingStatus,
+  submitting,
+}: {
+  pendingStatus: StatusKey | null;
+  setPendingStatus: (k: StatusKey | null) => void;
+  submitting: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      {STATUS_GROUPS.map((g) => {
+        const opts = STATUS_OPTIONS.filter((s) => s.group === g.key);
+        if (opts.length === 0) return null;
+        return (
+          <div key={g.key}>
+            <p className="font-display text-[10px] uppercase tracking-widest text-muted-foreground mb-2">{g.label}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {opts.map((s) => {
+                const selected = pendingStatus === s.key;
+                return (
+                  <button
+                    key={s.key}
+                    disabled={submitting}
+                    onClick={() => setPendingStatus(s.key)}
+                    className={[
+                      "flex items-center gap-2 rounded-xl border bg-card hover:bg-accent/40 disabled:opacity-50 transition-colors p-3 text-left",
+                      selected ? "border-primary bg-primary/10" : "border-border",
+                    ].join(" ")}
+                  >
+                    <span className="text-xl shrink-0">{s.emoji}</span>
+                    <span className="text-xs leading-tight">{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -867,25 +893,7 @@ function PickerCollapsed({
             <SheetTitle className="font-display tracking-widest">HOW ARE YOU, RIGHT NOW?</SheetTitle>
           </SheetHeader>
           <div className="mt-4 space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              {STATUS_OPTIONS.map((s) => {
-                const selected = pendingStatus === s.key;
-                return (
-                  <button
-                    key={s.key}
-                    disabled={submitting}
-                    onClick={() => setPendingStatus(s.key)}
-                    className={[
-                      "flex items-center gap-2 rounded-xl border bg-card hover:bg-accent/40 transition-colors p-3 text-left",
-                      selected ? "border-primary bg-primary/10" : "border-border",
-                    ].join(" ")}
-                  >
-                    <span className="text-xl shrink-0">{s.emoji}</span>
-                    <span className="text-xs leading-tight">{s.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <GroupedOptions pendingStatus={pendingStatus} setPendingStatus={setPendingStatus} submitting={submitting} />
             <Button className="w-full" onClick={handleConfirm} disabled={!pendingStatus || submitting}>
               {submitting ? "Sending…" : meta ? `Send — ${meta.label} ${meta.emoji}` : "Confirm update"}
             </Button>

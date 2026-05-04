@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UnlockRouteImport } from './routes/unlock'
 import { Route as TodayRouteImport } from './routes/today'
+import { Route as StudyRouteImport } from './routes/study'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as SetPasswordRouteImport } from './routes/set-password'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
@@ -27,6 +28,11 @@ const UnlockRoute = UnlockRouteImport.update({
 const TodayRoute = TodayRouteImport.update({
   id: '/today',
   path: '/today',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudyRoute = StudyRouteImport.update({
+  id: '/study',
+  path: '/study',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SetupRoute = SetupRouteImport.update({
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
   '/setup': typeof SetupRoute
+  '/study': typeof StudyRoute
   '/today': typeof TodayRoute
   '/unlock': typeof UnlockRoute
 }
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
   '/setup': typeof SetupRoute
+  '/study': typeof StudyRoute
   '/today': typeof TodayRoute
   '/unlock': typeof UnlockRoute
 }
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
   '/setup': typeof SetupRoute
+  '/study': typeof StudyRoute
   '/today': typeof TodayRoute
   '/unlock': typeof UnlockRoute
 }
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/set-password'
     | '/setup'
+    | '/study'
     | '/today'
     | '/unlock'
   fileRoutesByTo: FileRoutesByTo
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/set-password'
     | '/setup'
+    | '/study'
     | '/today'
     | '/unlock'
   id:
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/set-password'
     | '/setup'
+    | '/study'
     | '/today'
     | '/unlock'
   fileRoutesById: FileRoutesById
@@ -143,6 +155,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SetPasswordRoute: typeof SetPasswordRoute
   SetupRoute: typeof SetupRoute
+  StudyRoute: typeof StudyRoute
   TodayRoute: typeof TodayRoute
   UnlockRoute: typeof UnlockRoute
 }
@@ -161,6 +174,13 @@ declare module '@tanstack/react-router' {
       path: '/today'
       fullPath: '/today'
       preLoaderRoute: typeof TodayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/study': {
+      id: '/study'
+      path: '/study'
+      fullPath: '/study'
+      preLoaderRoute: typeof StudyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/setup': {
@@ -223,6 +243,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SetPasswordRoute: SetPasswordRoute,
   SetupRoute: SetupRoute,
+  StudyRoute: StudyRoute,
   TodayRoute: TodayRoute,
   UnlockRoute: UnlockRoute,
 }
