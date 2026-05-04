@@ -2,7 +2,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
 import { useSession, signOut } from "@/lib/session";
 import { Button } from "@/components/ui/button";
-import { Heart, Sparkles, BookOpen, Unlock, Moon, Sun, Settings, LogOut, CalendarIcon } from "lucide-react";
+import { Heart, Sparkles, BookOpen, Unlock, Moon, Sun, Settings, LogOut, CalendarIcon, GraduationCap } from "lucide-react";
 import { OnboardingTour } from "./OnboardingTour";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "./ui/sheet";
 import { Label } from "./ui/label";
@@ -26,6 +26,7 @@ const TABS = [
   { to: "/today", label: "Today", icon: Heart },
   { to: "/private", label: "Sanctuary", icon: Sparkles },
   { to: "/deen", label: "Deen", icon: BookOpen },
+  { to: "/study", label: "Study", icon: GraduationCap },
   { to: "/unlock", label: "Unlock", icon: Unlock },
 ] as const;
 
@@ -412,7 +413,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </footer>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-card/95 backdrop-blur sm:hidden">
-        <div className="mx-auto grid max-w-3xl grid-cols-4 gap-1 px-2 py-2">
+        <div className="mx-auto grid max-w-3xl grid-cols-5 gap-1 px-2 py-2">
           {TABS.map((t) => {
             const active = loc.pathname.startsWith(t.to);
             const Icon = t.icon;
