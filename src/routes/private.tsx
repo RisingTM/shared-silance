@@ -23,13 +23,11 @@ import {
   Lock,
   Images,
   ListChecks,
-  GraduationCap,
   Heart,
   CalendarDays,
 } from "lucide-react";
 import { UsGallery } from "@/components/sanctuary/UsGallery";
 import { UsHabits } from "@/components/sanctuary/UsHabits";
-import { UsStudying } from "@/components/sanctuary/UsStudying";
 import { UsFavourites } from "@/components/sanctuary/UsFavourites";
 import { UsCheckinCalendar } from "@/components/sanctuary/UsCheckinCalendar";
 import { toast } from "sonner";
@@ -53,7 +51,6 @@ type SectionKey =
   | "goals"
   | "us-gallery"
   | "us-habits"
-  | "us-studying"
   | "us-favourites"
   | "us-checkin";
 
@@ -66,7 +63,6 @@ const CARDS: { k: SectionKey; label: string; Icon: typeof BookOpen }[] = [
 const US_CARDS: { k: SectionKey; label: string; Icon: typeof BookOpen }[] = [
   { k: "us-gallery", label: "Gallery", Icon: Images },
   { k: "us-habits", label: "Habits", Icon: ListChecks },
-  { k: "us-studying", label: "Studying", Icon: GraduationCap },
   { k: "us-favourites", label: "Favourites", Icon: Heart },
   { k: "us-checkin", label: "Check-in", Icon: CalendarDays },
 ];
@@ -87,7 +83,6 @@ function PrivatePage() {
         {open === "goals" && <Goals canDelete={canDelete} />}
         {open === "us-gallery" && <UsGallery />}
         {open === "us-habits" && <UsHabits />}
-        {open === "us-studying" && <UsStudying />}
         {open === "us-favourites" && <UsFavourites />}
         {open === "us-checkin" && <UsCheckinCalendar />}
       </div>
