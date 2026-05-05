@@ -188,30 +188,33 @@ export function UsHabits() {
             <span className="text-[11px] text-amber-600 dark:text-amber-400">🔥 {myStreak}</span>
           )}
           {ownerIsMe ? (
-            <>
-              <Select value={h.visibility} onValueChange={(v) => updateHabitVis(h, v as any)}>
-                <SelectTrigger className="h-7 w-[100px] text-[10px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="private">
-                    <EyeOff className="size-3 inline mr-1" /> Private
-                  </SelectItem>
-                  <SelectItem value="visible">
-                    <Eye className="size-3 inline mr-1" /> Visible
-                  </SelectItem>
-                  <SelectItem value="shared">
-                    <Users className="size-3 inline mr-1" /> Shared
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+            editMode ? (
+              <>
+                <Select value={h.visibility} onValueChange={(v) => updateHabitVis(h, v as any)}>
+                  <SelectTrigger className="h-7 w-[100px] text-[10px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="private">
+                      <EyeOff className="size-3 inline mr-1" /> Private
+                    </SelectItem>
+                    <SelectItem value="visible">
+                      <Eye className="size-3 inline mr-1" /> Visible
+                    </SelectItem>
+                    <SelectItem value="shared">
+                      <Users className="size-3 inline mr-1" /> Shared
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <button onClick={() => deleteHabit(h.id)} className="text-muted-foreground hover:text-destructive">
+                  <Trash2 className="size-4" />
+                </button>
+              </>
+            ) : (
               <button onClick={() => openHistory(h)} className="text-muted-foreground hover:text-foreground">
                 <History className="size-4" />
               </button>
-              <button onClick={() => deleteHabit(h.id)} className="text-muted-foreground hover:text-destructive">
-                <Trash2 className="size-4" />
-              </button>
-            </>
+            )
           ) : (
             <span className="text-[10px] text-muted-foreground italic">{partnerProfile?.username ?? "partner"}</span>
           )}
