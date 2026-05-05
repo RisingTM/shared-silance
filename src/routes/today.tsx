@@ -367,34 +367,86 @@ function TodayPage() {
         </button>
       </div>
 
-      {/* Today Log sheet */}
+      {/* Today Log + History sheet */}
       <Sheet open={todayLogOpen} onOpenChange={(o) => (o ? setTodayLogOpen(true) : closeTodayLog())}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader>
-            <SheetTitle className="font-display tracking-widest">TODAY LOG</SheetTitle>
+            <SheetTitle className="font-display tracking-widest">JOURNAL</SheetTitle>
           </SheetHeader>
-          <div className="mt-6 space-y-3">
-            {todayLogEntries.length === 0 ? (
-              <p className="text-sm italic text-muted-foreground text-center py-12">nothing yet today…</p>
-            ) : (
-              <ul className="space-y-2">
-                {todayLogEntries.map((e, i) => (
-                  <li
-                    key={i}
-                    className="rounded-lg border border-border/60 bg-card/40 px-3 py-2 flex items-center gap-3"
-                  >
-                    <span className="text-xl shrink-0">{e.emoji}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm leading-tight truncate">{e.label}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        {new Date(e.ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <Tabs defaultValue="today" className="mt-5">
+            <TabsList className="grid grid-cols-2 w-full">
+              <TabsTrigger value="today">Today</TabsTrigger>
+              <TabsTrigger value="history">History</TabsTrigger>
+            </TabsList>
+            <TabsContent value="today" className="mt-4">
+              {todayLogEntries.length === 0 ? (
+                <p className="text-sm italic text-muted-foreground text-center py-12">nothing yet today…</p>
+              ) : (
+                <ol className="relative border-l border-border/60 ml-3 space-y-3">
+                  {todayLogEntries.map((e, i) => (
+                    <li key={i} className="ml-4">
+                      <span className="absolute -left-[7px] mt-2 size-3 rounded-full bg-primary/60 border border-background" />
+                      <div className="rounded-xl border border-border/50 bg-card/60 px-3 py-2 flex items-center gap-3">
+                        <span className="text-xl shrink-0">{e.emoji}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm leading-tight truncate">{e.label}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {new Date(e.ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                          </p>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </TabsContent>
+            <TabsContent value="history" className="mt-4">
+              {history.length === 0 ? (
+                <p className="text-sm italic text-muted-foreground text-center py-12">nothing yet…</p>
+              ) : (
+                <ul className="space-y-2">
+                  {(() => {
+                    // group by date
+                    const groups: Record<string, Row[]> = {};
+                    for (const r of history) {
+                      const d = new Date(r.created_at).toLocaleDateString();
+                      groups[d] ??= [];
+                      groups[d].push(r);
+                    }
+                    return Object.entries(groups).map(([date, rows]) => (
+                      <li key={date} className="space-y-1.5">
+                        <p className="text-[10px] uppercase tracking-widest text-muted-foreground sticky top-0 bg-background/95 backdrop-blur py-1">
+                          {date}
+                        </p>
+                        {rows.map((r) => {
+                          const m = statusMeta(r.status);
+                          const mine = r.user_id === profile?.id;
+                          return (
+                            <div
+                              key={r.id}
+                              className={[
+                                "rounded-xl border px-3 py-2 flex items-center gap-3",
+                                mine ? "border-primary/30 bg-primary/5" : "border-border/50 bg-card/40",
+                              ].join(" ")}
+                            >
+                              <span className="text-lg shrink-0">{m.emoji}</span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm leading-tight truncate">{m.label}</p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                  {mine ? "you" : `@${partnerProfile?.username ?? "partner"}`} ·{" "}
+                                  {new Date(r.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </li>
+                    ));
+                  })()}
+                </ul>
+              )}
+            </TabsContent>
+          </Tabs>
         </SheetContent>
       </Sheet>
 
