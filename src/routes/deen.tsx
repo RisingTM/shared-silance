@@ -351,35 +351,6 @@ function AthkarTracker() {
           </div>
         ))}
       </div>
-      <div className="border-t border-border/50 pt-3 space-y-3">
-        <p className="text-xs font-display uppercase tracking-widest text-muted-foreground">Dhikr counter</p>
-
-        {/* Astaghfirullah — full-width prominent */}
-        <DhikrCard
-          kind={ASTAGHFIRULLAH.kind}
-          label={ASTAGHFIRULLAH.label}
-          mine={counts[ASTAGHFIRULLAH.kind] ?? 0}
-          theirs={partnerCounts[ASTAGHFIRULLAH.kind] ?? 0}
-          partnerLabel={partnerLabel}
-          onTap={() => incDhikr(ASTAGHFIRULLAH.kind)}
-          prominent
-        />
-
-        {/* The other three side-by-side */}
-        <div className="grid grid-cols-3 gap-2">
-          {DHIKR_PRESETS.map((d) => (
-            <DhikrCard
-              key={d.kind}
-              kind={d.kind}
-              label={d.label}
-              mine={counts[d.kind] ?? 0}
-              theirs={partnerCounts[d.kind] ?? 0}
-              partnerLabel={partnerLabel}
-              onTap={() => incDhikr(d.kind)}
-            />
-          ))}
-        </div>
-      </div>
     </TrackerCard>
   );
 }
