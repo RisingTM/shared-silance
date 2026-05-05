@@ -687,29 +687,6 @@ function TodayPage() {
         </p>
       </div>
 
-      <Dialog>
-        <DialogTrigger asChild>
-          <Button variant="outline" className="w-full"><History className="size-4" /> View history</Button>
-        </DialogTrigger>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle className="font-display tracking-widest">FULL HISTORY</DialogTitle></DialogHeader>
-          <ScrollArea className="h-96 pr-4">
-            <ul className="space-y-2">
-              {history.length === 0 && <li className="text-sm text-muted-foreground italic text-center py-8">Nothing yet.</li>}
-              {history.map((r) => {
-                const m = statusMeta(r.status);
-                const who = r.user_id === profile?.id ? (profile?.display_name ?? "You") : (partnerProfile?.display_name ?? "Them");
-                return (
-                  <li key={r.id} className="flex items-center justify-between border-b border-border/40 py-2">
-                    <span className="flex items-center gap-2"><span className="text-xl">{m.emoji}</span><span className="text-sm">{m.label}</span></span>
-                    <span className="text-xs text-muted-foreground">{who} · {new Date(r.created_at).toLocaleString()}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
