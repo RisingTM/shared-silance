@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { History, Heart, RefreshCw, Pause, Play, ScrollText, Clock } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { insertWithOfflineQueue } from "@/lib/data-client";
 import { notify } from "@/lib/notifications";
 import { daysUntilNextBirthday } from "@/lib/birthday";
