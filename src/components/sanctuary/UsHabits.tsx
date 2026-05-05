@@ -17,7 +17,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { WeekCircles, weekStartSaturday } from "@/components/WeekCircles";
-import { Plus, Trash2, History, Eye, EyeOff, Users } from "lucide-react";
+import { Plus, Trash2, History, Eye, EyeOff, Users, Pencil, Check } from "lucide-react";
 import { toast } from "sonner";
 
 type Section = { id: string; name: string; user_id: string; sort_order: number };
@@ -41,6 +41,7 @@ export function UsHabits() {
   const [allLogs, setAllLogs] = useState<Log[]>([]);
   const [historyHabit, setHistoryHabit] = useState<Habit | null>(null);
   const [newSection, setNewSection] = useState("");
+  const [editMode, setEditMode] = useState(false);
 
   const myId = user?.id;
   const partnerId = partnerProfile?.id;
@@ -187,30 +188,33 @@ export function UsHabits() {
             <span className="text-[11px] text-amber-600 dark:text-amber-400">🔥 {myStreak}</span>
           )}
           {ownerIsMe ? (
-            <>
-              <Select value={h.visibility} onValueChange={(v) => updateHabitVis(h, v as any)}>
-                <SelectTrigger className="h-7 w-[100px] text-[10px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="private">
-                    <EyeOff className="size-3 inline mr-1" /> Private
-                  </SelectItem>
-                  <SelectItem value="visible">
-                    <Eye className="size-3 inline mr-1" /> Visible
-                  </SelectItem>
-                  <SelectItem value="shared">
-                    <Users className="size-3 inline mr-1" /> Shared
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+            editMode ? (
+              <>
+                <Select value={h.visibility} onValueChange={(v) => updateHabitVis(h, v as any)}>
+                  <SelectTrigger className="h-7 w-[100px] text-[10px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="private">
+                      <EyeOff className="size-3 inline mr-1" /> Private
+                    </SelectItem>
+                    <SelectItem value="visible">
+                      <Eye className="size-3 inline mr-1" /> Visible
+                    </SelectItem>
+                    <SelectItem value="shared">
+                      <Users className="size-3 inline mr-1" /> Shared
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <button onClick={() => deleteHabit(h.id)} className="text-muted-foreground hover:text-destructive">
+                  <Trash2 className="size-4" />
+                </button>
+              </>
+            ) : (
               <button onClick={() => openHistory(h)} className="text-muted-foreground hover:text-foreground">
                 <History className="size-4" />
               </button>
-              <button onClick={() => deleteHabit(h.id)} className="text-muted-foreground hover:text-destructive">
-                <Trash2 className="size-4" />
-              </button>
-            </>
+            )
           ) : (
             <span className="text-[10px] text-muted-foreground italic">{partnerProfile?.username ?? "partner"}</span>
           )}
@@ -246,8 +250,15 @@ export function UsHabits() {
 
   return (
     <div className="space-y-4">
-      <div className="text-center">
+      <div className="text-center relative">
         <h2 className="font-display text-2xl tracking-widest text-primary">HABITS</h2>
+        <button
+          onClick={() => setEditMode((v) => !v)}
+          className="absolute top-0 right-0 size-8 rounded-full text-muted-foreground/70 hover:text-primary hover:bg-accent/40 inline-flex items-center justify-center transition-colors"
+          aria-label={editMode ? "Done editing" : "Edit habits"}
+        >
+          {editMode ? <Check className="size-4" /> : <Pencil className="size-4" />}
+        </button>
       </div>
 
       {/* Stats */}
@@ -264,29 +275,52 @@ export function UsHabits() {
         </div>
       </div>
 
-      {/* Add section */}
-      <div className="flex gap-2">
-        <Input placeholder="New section name…" value={newSection} onChange={(e) => setNewSection(e.target.value)} />
-        <Button onClick={addSection}>
-          <Plus className="size-4" /> Section
-        </Button>
-      </div>
+      {/* Add section — only when editing */}
+      {editMode && (
+        <div className="flex gap-2">
+          <Input placeholder="New section name…" value={newSection} onChange={(e) => setNewSection(e.target.value)} />
+          <Button onClick={addSection}>
+            <Plus className="size-4" /> Section
+          </Button>
+        </div>
+      )}
 
       {/* My sections */}
       {mySections.map((sec) => {
         const myHabits = habits.filter((h) => h.section_id === sec.id && h.user_id === myId);
+        const groups: { key: Habit["visibility"]; label: string; icon: any }[] = [
+          { key: "shared", label: "Shared", icon: Users },
+          { key: "visible", label: "Visible", icon: Eye },
+          { key: "private", label: "Private", icon: EyeOff },
+        ];
         return (
           <div key={sec.id} className="parchment-card rounded-2xl p-4 space-y-3">
             <div className="flex items-center gap-2">
               <h3 className="flex-1 font-display text-sm uppercase tracking-widest text-primary">{sec.name}</h3>
-              <button onClick={() => deleteSection(sec.id)} className="text-muted-foreground hover:text-destructive">
-                <Trash2 className="size-4" />
-              </button>
+              {editMode && (
+                <button onClick={() => deleteSection(sec.id)} className="text-muted-foreground hover:text-destructive">
+                  <Trash2 className="size-4" />
+                </button>
+              )}
             </div>
-            {myHabits.map((h) => renderHabit(h, true))}
-            <Button variant="ghost" size="sm" onClick={() => addHabit(sec.id)}>
-              <Plus className="size-3" /> Add habit
-            </Button>
+            {groups.map((g) => {
+              const items = myHabits.filter((h) => h.visibility === g.key);
+              if (items.length === 0) return null;
+              const GIcon = g.icon;
+              return (
+                <div key={g.key} className="space-y-2">
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1">
+                    <GIcon className="size-3" /> {g.label}
+                  </p>
+                  {items.map((h) => renderHabit(h, true))}
+                </div>
+              );
+            })}
+            {editMode && (
+              <Button variant="ghost" size="sm" onClick={() => addHabit(sec.id)}>
+                <Plus className="size-3" /> Add habit
+              </Button>
+            )}
           </div>
         );
       })}
@@ -294,10 +328,25 @@ export function UsHabits() {
       {/* Unsectioned habits */}
       <div className="parchment-card rounded-2xl p-4 space-y-3">
         <h3 className="font-display text-sm uppercase tracking-widest text-primary">Other</h3>
-        {habits.filter((h) => h.user_id === myId && !h.section_id).map((h) => renderHabit(h, true))}
-        <Button variant="ghost" size="sm" onClick={() => addHabit(null)}>
-          <Plus className="size-3" /> Add habit
-        </Button>
+        {(["shared", "visible", "private"] as const).map((vis) => {
+          const items = habits.filter((h) => h.user_id === myId && !h.section_id && h.visibility === vis);
+          if (items.length === 0) return null;
+          const Icon = vis === "shared" ? Users : vis === "visible" ? Eye : EyeOff;
+          const label = vis === "shared" ? "Shared" : vis === "visible" ? "Visible" : "Private";
+          return (
+            <div key={vis} className="space-y-2">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1">
+                <Icon className="size-3" /> {label}
+              </p>
+              {items.map((h) => renderHabit(h, true))}
+            </div>
+          );
+        })}
+        {editMode && (
+          <Button variant="ghost" size="sm" onClick={() => addHabit(null)}>
+            <Plus className="size-3" /> Add habit
+          </Button>
+        )}
       </div>
 
       {/* Partner read-only (visible only) */}
@@ -311,10 +360,26 @@ export function UsHabits() {
               (h) => h.section_id === sec.id && h.user_id === partnerId && (h.visibility === "visible" || h.visibility === "shared"),
             );
             if (partnerHabits.length === 0) return null;
+            const groups: { key: "shared" | "visible"; label: string; icon: any }[] = [
+              { key: "shared", label: "Shared", icon: Users },
+              { key: "visible", label: "Visible", icon: Eye },
+            ];
             return (
               <div key={sec.id} className="rounded-2xl border border-border/60 p-4 space-y-3 bg-muted/20">
                 <h4 className="font-display text-xs uppercase tracking-widest text-muted-foreground">{sec.name}</h4>
-                {partnerHabits.map((h) => renderHabit(h, false))}
+                {groups.map((g) => {
+                  const items = partnerHabits.filter((h) => h.visibility === g.key);
+                  if (items.length === 0) return null;
+                  const GIcon = g.icon;
+                  return (
+                    <div key={g.key} className="space-y-2">
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1">
+                        <GIcon className="size-3" /> {g.label}
+                      </p>
+                      {items.map((h) => renderHabit(h, false))}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}

@@ -49,9 +49,9 @@ function DeenPage() {
       </div>
 
       <PrayerTracker />
-      <FastingTracker />
       <AthkarTracker />
       <QuranTracker />
+      <FastingTracker />
       <DuaSection />
     </div>
   );
@@ -311,25 +311,8 @@ function AthkarTracker() {
 
   return (
     <TrackerCard title="Athkar">
-      <div className="space-y-5">
-        {ATHKAR_KINDS.map((k) => (
-          <div key={k.kind} className="space-y-2">
-            <p className="text-xs font-display uppercase tracking-widest">{k.label}</p>
-            <div className="space-y-2">
-              <AlignedRow label="You">
-                <WeekCircles days={mine[k.kind] ?? EMPTY_WEEK} onToggle={(i, n) => toggle(k.kind, i, n)} size="sm" tone="gold" />
-              </AlignedRow>
-              <AlignedRow label={partnerLabel}>
-                <WeekCircles days={theirs[k.kind] ?? EMPTY_WEEK} size="sm" readOnly tone="muted" />
-              </AlignedRow>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="border-t border-border/50 pt-3 space-y-3">
+      <div className="space-y-3">
         <p className="text-xs font-display uppercase tracking-widest text-muted-foreground">Dhikr counter</p>
-
-        {/* Astaghfirullah — full-width prominent */}
         <DhikrCard
           kind={ASTAGHFIRULLAH.kind}
           label={ASTAGHFIRULLAH.label}
@@ -339,8 +322,6 @@ function AthkarTracker() {
           onTap={() => incDhikr(ASTAGHFIRULLAH.kind)}
           prominent
         />
-
-        {/* The other three side-by-side */}
         <div className="grid grid-cols-3 gap-2">
           {DHIKR_PRESETS.map((d) => (
             <DhikrCard
@@ -354,6 +335,21 @@ function AthkarTracker() {
             />
           ))}
         </div>
+      </div>
+      <div className="space-y-5 border-t border-border/50 pt-4">
+        {ATHKAR_KINDS.map((k) => (
+          <div key={k.kind} className="space-y-2">
+            <p className="text-xs font-display uppercase tracking-widest">{k.label}</p>
+            <div className="space-y-2">
+              <AlignedRow label="You">
+                <WeekCircles days={mine[k.kind] ?? EMPTY_WEEK} onToggle={(i, n) => toggle(k.kind, i, n)} size="sm" tone="gold" />
+              </AlignedRow>
+              <AlignedRow label={partnerLabel}>
+                <WeekCircles days={theirs[k.kind] ?? EMPTY_WEEK} size="sm" readOnly tone="muted" />
+              </AlignedRow>
+            </div>
+          </div>
+        ))}
       </div>
     </TrackerCard>
   );
