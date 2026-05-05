@@ -393,7 +393,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
       </header>
 
-      <main className="flex-1 mx-auto w-full max-w-3xl px-4 py-6 pb-24 sm:pb-8">{children}</main>
+      <main className="flex-1 mx-auto w-full max-w-3xl px-4 py-6 pb-40 sm:pb-8">{children}</main>
 
       <footer className="border-t border-border/60 bg-card/40 mt-8">
         <div className="mx-auto max-w-3xl px-4 py-6 text-center">
