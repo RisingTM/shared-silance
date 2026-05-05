@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useSession } from "@/lib/session";
@@ -8,17 +8,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Play, Pause, Square, ChevronDown, Lock, Trophy } from "lucide-react";
+import { Play, Pause, Square, ChevronDown, ChevronLeft, ChevronRight, Lock, Flame, Clock, CalendarDays, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 import { notify } from "@/lib/notifications";
 import { parseSyllabus, itemKey, type Module } from "@/lib/syllabus";
 import * as Timer from "@/lib/study-timer";
 import { STUDY_ACHIEVEMENTS, evaluateAchievements } from "@/lib/study-achievements";
-import { useIsMobile } from "@/hooks/use-mobile";
 
 export const Route = createFileRoute("/study")({
   component: () => (
@@ -59,7 +66,7 @@ function StudyPage() {
   const loadAll = async () => {
     if (!journeyId) return;
     const since = new Date();
-    since.setDate(since.getDate() - 90);
+    since.setMonth(since.getMonth() - 12);
     const [{ data: ss }, { data: sy }, { data: rt }, { data: ach }] = await Promise.all([
       supabase.from("study_sessions").select("*").eq("journey_id", journeyId).gte("started_at", since.toISOString()).order("started_at", { ascending: false }),
       supabase.from("study_syllabus").select("content").eq("journey_id", journeyId).maybeSingle(),
@@ -106,9 +113,8 @@ function StudyPage() {
         <p className="text-muted-foreground italic mt-1 text-sm">Sessions, subjects, and shared milestones.</p>
       </div>
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid grid-cols-4 w-full">
+        <TabsList className="grid grid-cols-3 w-full">
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-          <TabsTrigger value="session">Session</TabsTrigger>
           <TabsTrigger value="subjects">Subjects</TabsTrigger>
           <TabsTrigger value="achievements">Badges</TabsTrigger>
         </TabsList>
@@ -120,15 +126,7 @@ function StudyPage() {
             partnerName={partnerProfile?.username ?? "partner"}
             syllabus={syllabus}
             achievements={achievements}
-          />
-        </TabsContent>
-        <TabsContent value="session" className="space-y-4">
-          <SessionTab
-            myId={myId}
-            partnerName={partnerProfile?.username ?? "partner"}
             journeyId={journeyId}
-            syllabus={syllabus}
-            sessions={sessions}
             sessionDefault={sessionDefault}
             breakDefault={breakDefault}
             setSessionDefault={setSessionDefault}
@@ -163,7 +161,9 @@ function StudyPage() {
   );
 }
 
-// ----- Dashboard -----
+// ============================================================
+// Dashboard (now also contains the Session timer)
+// ============================================================
 
 function DashboardTab({
   sessions,
@@ -171,6 +171,13 @@ function DashboardTab({
   partnerId,
   partnerName,
   achievements,
+  syllabus,
+  journeyId,
+  sessionDefault,
+  breakDefault,
+  setSessionDefault,
+  setBreakDefault,
+  onSessionLogged,
 }: {
   sessions: Session[];
   myId: string;
@@ -178,11 +185,13 @@ function DashboardTab({
   partnerName: string;
   syllabus: Module[];
   achievements: Achievement[];
+  journeyId: string;
+  sessionDefault: number;
+  breakDefault: number;
+  setSessionDefault: (v: number) => void;
+  setBreakDefault: (v: number) => void;
+  onSessionLogged: () => Promise<void> | void;
 }) {
-  const isMobile = useIsMobile();
-  const weeks = isMobile ? 8 : 12;
-  const [view, setView] = useState<"together" | "separate">("together");
-
   const stat = (uid: string) => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const weekStart = new Date(today); weekStart.setDate(weekStart.getDate() - 6);
@@ -203,13 +212,12 @@ function DashboardTab({
       if (dates.has(d.toISOString().slice(0, 10))) streak++;
       else break;
     }
-    return { today: todayS / 3600, week: weekS / 3600, month: monthS / 3600, streak };
+    return { todaySec: todayS, weekSec: weekS, monthSec: monthS, streak };
   };
 
   const me = stat(myId);
   const them = partnerId ? stat(partnerId) : null;
 
-  // Same-day shared achievement banner
   const sharedBanner = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     const byKey: Record<string, Set<string>> = {};
@@ -238,50 +246,97 @@ function DashboardTab({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <StatBlock label="You" s={me} tone="gold" />
-        <StatBlock label={`@${partnerName}`} s={them} tone="muted" />
-      </div>
+      {/* Live session timer (top of dashboard) */}
+      <SessionPanel
+        myId={myId}
+        partnerName={partnerName}
+        journeyId={journeyId}
+        syllabus={syllabus}
+        sessionDefault={sessionDefault}
+        breakDefault={breakDefault}
+        setSessionDefault={setSessionDefault}
+        setBreakDefault={setBreakDefault}
+        onSessionLogged={onSessionLogged}
+      />
 
+      {/* Modern stat cards */}
+      <ModernStats me={me} them={them} partnerName={partnerName} />
+
+      {/* Monthly activity */}
       <div className="parchment-card rounded-2xl p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="font-display text-sm uppercase tracking-widest text-primary">Activity</h3>
-          <div className="flex items-center gap-2 text-[11px]">
-            <span className={view === "together" ? "text-primary" : "text-muted-foreground"}>Together</span>
-            <Switch checked={view === "separate"} onCheckedChange={(c) => setView(c ? "separate" : "together")} />
-            <span className={view === "separate" ? "text-primary" : "text-muted-foreground"}>Separate</span>
-          </div>
-        </div>
-        {view === "together" ? (
-          <Heatmap sessions={sessions} weeks={weeks} myId={myId} partnerId={partnerId} mode="together" />
-        ) : (
-          <div className="space-y-3">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">You</p>
-              <Heatmap sessions={sessions} weeks={weeks} myId={myId} partnerId={partnerId} mode="me" />
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">@{partnerName}</p>
-              <Heatmap sessions={sessions} weeks={weeks} myId={myId} partnerId={partnerId} mode="partner" />
-            </div>
-          </div>
-        )}
+        <MonthCalendar sessions={sessions} myId={myId} partnerId={partnerId} partnerName={partnerName} />
       </div>
 
       <SubjectBreakdown sessions={sessions} myId={myId} partnerId={partnerId} partnerName={partnerName} />
+
+      <RecentSessions sessions={sessions} myId={myId} partnerName={partnerName} />
     </div>
   );
 }
 
-function StatBlock({ label, s, tone }: { label: string; s: { today: number; week: number; month: number; streak: number } | null; tone: "gold" | "muted" }) {
+// ----- Modern stats -----
+
+function ModernStats({
+  me,
+  them,
+  partnerName,
+}: {
+  me: { todaySec: number; weekSec: number; monthSec: number; streak: number };
+  them: { todaySec: number; weekSec: number; monthSec: number; streak: number } | null;
+  partnerName: string;
+}) {
   return (
-    <div className={["parchment-card rounded-2xl p-4 space-y-2", tone === "gold" ? "" : "opacity-90"].join(" ")}>
-      <p className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">{label}</p>
-      {s ? (
+    <div className="grid grid-cols-2 gap-3">
+      <StatCardModern label="You" data={me} primary />
+      <StatCardModern label={`@${partnerName}`} data={them} />
+    </div>
+  );
+}
+
+function StatCardModern({
+  label,
+  data,
+  primary,
+}: {
+  label: string;
+  data: { todaySec: number; weekSec: number; monthSec: number; streak: number } | null;
+  primary?: boolean;
+}) {
+  return (
+    <div
+      className={[
+        "rounded-2xl p-4 border space-y-3",
+        primary
+          ? "border-primary/30 bg-gradient-to-br from-primary/10 via-card to-card shadow-sm"
+          : "border-border/60 bg-card/60",
+      ].join(" ")}
+    >
+      <div className="flex items-center justify-between">
+        <p className="font-display text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{label}</p>
+        {data && data.streak > 0 && (
+          <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
+            <Flame className="size-3" /> {data.streak}d
+          </span>
+        )}
+      </div>
+      {data ? (
         <>
-          <p className="font-display text-2xl text-primary tabular-nums">{s.today.toFixed(1)}<span className="text-xs text-muted-foreground"> h today</span></p>
-          <p className="text-[11px] text-muted-foreground tabular-nums">{s.week.toFixed(1)}h week · {s.month.toFixed(1)}h month</p>
-          <p className="text-[11px] text-amber-600 dark:text-amber-400">🔥 {s.streak} day{s.streak === 1 ? "" : "s"}</p>
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Today</p>
+            <p className="font-display text-2xl text-primary tabular-nums leading-tight">
+              {Timer.fmtHourMin(data.todaySec)}
+            </p>
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground border-t border-border/40 pt-2">
+            <span className="inline-flex items-center gap-1">
+              <CalendarDays className="size-3" /> {Timer.fmtHourMin(data.weekSec)}
+            </span>
+            <span className="tabular-nums">{Timer.fmtHourMin(data.monthSec)}</span>
+          </div>
+          <div className="flex justify-between text-[9px] uppercase tracking-widest text-muted-foreground/70">
+            <span>week</span>
+            <span>month</span>
+          </div>
         </>
       ) : (
         <p className="text-xs italic text-muted-foreground">no data</p>
@@ -290,111 +345,184 @@ function StatBlock({ label, s, tone }: { label: string; s: { today: number; week
   );
 }
 
-function Heatmap({ sessions, weeks, myId, partnerId, mode }: { sessions: Session[]; weeks: number; myId: string; partnerId: string | null; mode: "together" | "me" | "partner" }) {
-  // Build grid: cols = weeks, rows = Mon..Sun
-  // Anchor: today is in the rightmost column. Compute from "this week's Monday".
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const dayMs = 86400000;
-  const dow = (today.getDay() + 6) % 7; // Mon=0..Sun=6
-  const lastMonday = new Date(today.getTime() - dow * dayMs);
+// ----- Monthly calendar heatmap -----
 
-  // Aggregate minutes per (uid, dateKey)
-  const minutesByDay: Record<string, { me: number; them: number }> = {};
-  for (const s of sessions) {
-    const k = new Date(s.started_at); k.setHours(0, 0, 0, 0);
-    const key = k.toISOString().slice(0, 10);
-    minutesByDay[key] ??= { me: 0, them: 0 };
-    const minutes = s.duration_seconds / 60;
-    if (s.user_id === myId) minutesByDay[key].me += minutes;
-    else if (partnerId && s.user_id === partnerId) minutesByDay[key].them += minutes;
-  }
+function MonthCalendar({
+  sessions,
+  myId,
+  partnerId,
+  partnerName,
+}: {
+  sessions: Session[];
+  myId: string;
+  partnerId: string | null;
+  partnerName: string;
+}) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const [cursor, setCursor] = useState<{ y: number; m: number }>({
+    y: today.getFullYear(),
+    m: today.getMonth(),
+  });
 
-  const colorFor = (m: number, isMe: boolean): string => {
+  const minutesByDay: Record<string, { me: number; them: number }> = useMemo(() => {
+    const map: Record<string, { me: number; them: number }> = {};
+    for (const s of sessions) {
+      const k = new Date(s.started_at);
+      k.setHours(0, 0, 0, 0);
+      const key = `${k.getFullYear()}-${k.getMonth()}-${k.getDate()}`;
+      map[key] ??= { me: 0, them: 0 };
+      const minutes = s.duration_seconds / 60;
+      if (s.user_id === myId) map[key].me += minutes;
+      else if (partnerId && s.user_id === partnerId) map[key].them += minutes;
+    }
+    return map;
+  }, [sessions, myId, partnerId]);
+
+  const firstDow = (new Date(cursor.y, cursor.m, 1).getDay() + 6) % 7; // Mon=0..Sun=6
+  const daysInMonth = new Date(cursor.y, cursor.m + 1, 0).getDate();
+  const cells: (Date | null)[] = [];
+  for (let i = 0; i < firstDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(cursor.y, cursor.m, d));
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const monthLabel = new Date(cursor.y, cursor.m, 1).toLocaleString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+
+  const goPrev = () =>
+    setCursor((c) => (c.m === 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m: c.m - 1 }));
+  const goNext = () =>
+    setCursor((c) => (c.m === 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m: c.m + 1 }));
+  const isFuture =
+    cursor.y > today.getFullYear() ||
+    (cursor.y === today.getFullYear() && cursor.m >= today.getMonth());
+
+  // Per-day intensity color
+  const colorFor = (m: number, isMe: boolean) => {
     if (m <= 0) return "bg-muted/40";
-    const intensity = m < 30 ? 0.25 : m < 90 ? 0.5 : m < 180 ? 0.75 : 1;
-    if (isMe) {
-      return ["bg-primary/30", "bg-primary/50", "bg-primary/70", "bg-primary"][Math.floor(intensity * 4) - 1] ?? "bg-primary";
-    }
-    return ["bg-teal-500/30", "bg-teal-500/50", "bg-teal-500/70", "bg-teal-500"][Math.floor(intensity * 4) - 1] ?? "bg-teal-500";
+    const tier = m < 30 ? 1 : m < 90 ? 2 : m < 180 ? 3 : 4;
+    if (isMe) return ["bg-primary/25", "bg-primary/45", "bg-primary/70", "bg-primary"][tier - 1];
+    return ["bg-teal-500/25", "bg-teal-500/45", "bg-teal-500/70", "bg-teal-500"][tier - 1];
   };
 
-  // Build columns
-  const cols: { date: Date; minutesMe: number; minutesThem: number }[][] = [];
-  for (let w = weeks - 1; w >= 0; w--) {
-    const colMonday = new Date(lastMonday.getTime() - w * 7 * dayMs);
-    const col: typeof cols[number] = [];
-    for (let d = 0; d < 7; d++) {
-      const date = new Date(colMonday.getTime() + d * dayMs);
-      const key = date.toISOString().slice(0, 10);
-      const v = minutesByDay[key] ?? { me: 0, them: 0 };
-      col.push({ date, minutesMe: v.me, minutesThem: v.them });
+  // Month totals
+  const totals = useMemo(() => {
+    let me = 0, them = 0;
+    for (const c of cells) {
+      if (!c) continue;
+      const key = `${c.getFullYear()}-${c.getMonth()}-${c.getDate()}`;
+      const v = minutesByDay[key];
+      if (v) {
+        me += v.me;
+        them += v.them;
+      }
     }
-    cols.push(col);
-  }
-
-  const monthLabel = (col: typeof cols[number]) => {
-    const first = col[0];
-    if (first.date.getDate() <= 7) return first.date.toLocaleString("en-US", { month: "short" });
-    return "";
-  };
+    return { me: me * 60, them: them * 60 };
+  }, [cells, minutesByDay]);
 
   return (
-    <div className="overflow-x-auto">
-      <div className="inline-grid gap-[2px]" style={{ gridTemplateColumns: `repeat(${weeks}, minmax(14px, 1fr))` }}>
-        {cols.map((col, i) => (
-          <div key={i} className="text-[8px] text-muted-foreground/70 text-center h-3">{monthLabel(col)}</div>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <button
+          onClick={goPrev}
+          className="size-8 rounded-full hover:bg-accent/40 inline-flex items-center justify-center text-muted-foreground"
+          aria-label="Previous month"
+        >
+          <ChevronLeft className="size-4" />
+        </button>
+        <div className="text-center">
+          <p className="font-display text-sm uppercase tracking-widest text-primary">{monthLabel}</p>
+          <p className="text-[10px] text-muted-foreground tabular-nums mt-0.5">
+            you {Timer.fmtHourMin(totals.me)} · @{partnerName} {Timer.fmtHourMin(totals.them)}
+          </p>
+        </div>
+        <button
+          onClick={goNext}
+          disabled={isFuture}
+          className="size-8 rounded-full hover:bg-accent/40 inline-flex items-center justify-center text-muted-foreground disabled:opacity-30"
+          aria-label="Next month"
+        >
+          <ChevronRight className="size-4" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1 text-[9px] text-muted-foreground/70 text-center">
+        {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+          <div key={i}>{d}</div>
         ))}
-        {cols.map((col, i) => (
-          <div key={i} className="grid grid-rows-7 gap-[2px]">
-            {col.map((cell, d) => {
-              const isToday = cell.date.toDateString() === today.toDateString();
-              const showMe = mode === "together" || mode === "me";
-              const showThem = mode === "together" || mode === "partner";
-              const meHas = showMe && cell.minutesMe > 0;
-              const themHas = showThem && cell.minutesThem > 0;
-              if (mode !== "together") {
-                const m = mode === "me" ? cell.minutesMe : cell.minutesThem;
-                return (
-                  <div
-                    key={d}
-                    title={`${cell.date.toLocaleDateString()} — ${(m / 60).toFixed(1)}h`}
-                    className={["aspect-square rounded-sm", colorFor(m, mode === "me"), isToday && "ring-1 ring-primary/60"].filter(Boolean).join(" ")}
-                  />
-                );
-              }
-              if (meHas && themHas) {
-                return (
-                  <div key={d} title={`${cell.date.toLocaleDateString()}`} className={["aspect-square rounded-sm overflow-hidden flex", isToday && "ring-1 ring-primary/60"].filter(Boolean).join(" ")}>
-                    <div className={["w-1/2 h-full", colorFor(cell.minutesMe, true)].join(" ")} />
-                    <div className={["w-1/2 h-full", colorFor(cell.minutesThem, false)].join(" ")} />
-                  </div>
-                );
-              }
-              if (meHas) return <div key={d} title={`${cell.date.toLocaleDateString()} — ${(cell.minutesMe / 60).toFixed(1)}h`} className={["aspect-square rounded-sm", colorFor(cell.minutesMe, true), isToday && "ring-1 ring-primary/60"].filter(Boolean).join(" ")} />;
-              if (themHas) return <div key={d} title={`${cell.date.toLocaleDateString()} — ${(cell.minutesThem / 60).toFixed(1)}h`} className={["aspect-square rounded-sm", colorFor(cell.minutesThem, false), isToday && "ring-1 ring-primary/60"].filter(Boolean).join(" ")} />;
-              return <div key={d} className={["aspect-square rounded-sm bg-muted/40", isToday && "ring-1 ring-primary/60"].filter(Boolean).join(" ")} />;
-            })}
-          </div>
-        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((c, i) => {
+          if (!c) return <div key={i} className="aspect-square" />;
+          const key = `${c.getFullYear()}-${c.getMonth()}-${c.getDate()}`;
+          const v = minutesByDay[key] ?? { me: 0, them: 0 };
+          const isToday = c.getTime() === today.getTime();
+          const meHas = v.me > 0;
+          const themHas = v.them > 0;
+          const totalH = (v.me + v.them) / 60;
+          return (
+            <div
+              key={i}
+              title={`${c.toLocaleDateString()} — ${totalH.toFixed(1)}h`}
+              className={[
+                "aspect-square rounded-md relative overflow-hidden flex items-center justify-center text-[9px] font-display",
+                isToday && "ring-1 ring-primary/60",
+              ].filter(Boolean).join(" ")}
+            >
+              {meHas && themHas ? (
+                <div className="absolute inset-0 flex">
+                  <div className={["w-1/2 h-full", colorFor(v.me, true)].join(" ")} />
+                  <div className={["w-1/2 h-full", colorFor(v.them, false)].join(" ")} />
+                </div>
+              ) : meHas ? (
+                <div className={["absolute inset-0", colorFor(v.me, true)].join(" ")} />
+              ) : themHas ? (
+                <div className={["absolute inset-0", colorFor(v.them, false)].join(" ")} />
+              ) : (
+                <div className="absolute inset-0 bg-muted/30" />
+              )}
+              <span className="relative text-foreground/70 mix-blend-luminosity">{c.getDate()}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex justify-end gap-3 text-[10px] text-muted-foreground">
+        <span><span className="inline-block size-2 rounded-sm bg-primary mr-1" />you</span>
+        <span><span className="inline-block size-2 rounded-sm bg-teal-500 mr-1" />@{partnerName}</span>
       </div>
     </div>
   );
 }
 
-function SubjectBreakdown({ sessions, myId, partnerId, partnerName }: { sessions: Session[]; myId: string; partnerId: string | null; partnerName: string }) {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const weekStart = new Date(today); weekStart.setDate(weekStart.getDate() - 6);
+function SubjectBreakdown({
+  sessions,
+  myId,
+  partnerId,
+  partnerName,
+}: {
+  sessions: Session[];
+  myId: string;
+  partnerId: string | null;
+  partnerName: string;
+}) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const weekStart = new Date(today);
+  weekStart.setDate(weekStart.getDate() - 6);
   const map: Record<string, { me: number; them: number }> = {};
   for (const s of sessions) {
     if (new Date(s.started_at) < weekStart) continue;
     const name = s.subject_name ?? "General study";
     map[name] ??= { me: 0, them: 0 };
-    const h = s.duration_seconds / 3600;
-    if (s.user_id === myId) map[name].me += h;
-    else if (partnerId && s.user_id === partnerId) map[name].them += h;
+    if (s.user_id === myId) map[name].me += s.duration_seconds;
+    else if (partnerId && s.user_id === partnerId) map[name].them += s.duration_seconds;
   }
-  const entries = Object.entries(map).sort((a, b) => (b[1].me + b[1].them) - (a[1].me + a[1].them));
-  const max = Math.max(0.1, ...entries.map(([, v]) => v.me + v.them));
+  const entries = Object.entries(map).sort((a, b) => b[1].me + b[1].them - (a[1].me + a[1].them));
+  const max = Math.max(60, ...entries.map(([, v]) => v.me + v.them));
 
   if (entries.length === 0) {
     return (
@@ -413,7 +541,7 @@ function SubjectBreakdown({ sessions, myId, partnerId, partnerName }: { sessions
           <div key={name}>
             <div className="flex items-center justify-between text-[11px]">
               <span className="truncate">{name}</span>
-              <span className="text-muted-foreground tabular-nums">{(v.me + v.them).toFixed(1)}h</span>
+              <span className="text-muted-foreground tabular-nums">{Timer.fmtHourMin(v.me + v.them)}</span>
             </div>
             <div className="flex h-2 rounded-full overflow-hidden bg-muted/40 mt-1">
               <div className="bg-primary" style={{ width: `${(v.me / max) * 100}%` }} />
@@ -430,25 +558,55 @@ function SubjectBreakdown({ sessions, myId, partnerId, partnerName }: { sessions
   );
 }
 
-// ----- Session -----
+function RecentSessions({ sessions, myId, partnerName }: { sessions: Session[]; myId: string; partnerName: string }) {
+  const recent = sessions.slice(0, 12);
+  if (recent.length === 0) return null;
+  return (
+    <div className="parchment-card rounded-2xl p-4 space-y-2">
+      <h3 className="font-display text-sm uppercase tracking-widest text-primary inline-flex items-center gap-2">
+        <Clock className="size-3.5" /> Recent
+      </h3>
+      <ul className="divide-y divide-border/40">
+        {recent.map((s) => {
+          const isMine = s.user_id === myId;
+          return (
+            <li key={s.id} className={["flex items-center justify-between text-xs py-2", !isMine && "opacity-70"].filter(Boolean).join(" ")}>
+              <div className="flex-1 min-w-0">
+                <p className="truncate inline-flex items-center gap-1.5">
+                  <BookOpen className="size-3 text-muted-foreground shrink-0" />
+                  {s.subject_name ?? "General study"}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {new Date(s.started_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })} · {isMine ? "you" : `@${partnerName}`}
+                </p>
+              </div>
+              <span className="tabular-nums text-muted-foreground ml-2">{Timer.fmtHourMin(s.duration_seconds)}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
-function SessionTab({
+// ============================================================
+// Session panel — synced timer
+// ============================================================
+
+function SessionPanel({
   myId,
   journeyId,
   syllabus,
-  sessions,
   sessionDefault,
   breakDefault,
   setSessionDefault,
   setBreakDefault,
   onSessionLogged,
-  partnerName,
 }: {
   myId: string;
   partnerName: string;
   journeyId: string;
   syllabus: Module[];
-  sessions: Session[];
   sessionDefault: number;
   breakDefault: number;
   setSessionDefault: (v: number) => void;
@@ -459,50 +617,90 @@ function SessionTab({
   const [subject, setSubject] = useState<{ key: string | null; name: string | null }>({ key: null, name: null });
   const [, setTick] = useState(0);
   const [stopOpen, setStopOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
-  // Load persisted state on mount
+  // Initial load: prefer remote (cross-device), fall back to local
   useEffect(() => {
     if (!myId) return;
-    const s = Timer.load(myId);
-    if (s) setState(s);
-    /* eslint-disable-next-line */
+    let cancelled = false;
+    (async () => {
+      const remote = await Timer.loadRemote(myId).catch(() => null);
+      if (cancelled) return;
+      if (remote) {
+        setState(remote);
+        Timer.saveLocal(myId, remote);
+      } else {
+        setState(Timer.loadLocal(myId));
+      }
+      setLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [myId]);
 
-  // Tick every second when running
+  // Re-sync when tab regains focus (so phone picks up laptop)
+  useEffect(() => {
+    if (!myId) return;
+    const onFocus = async () => {
+      const remote = await Timer.loadRemote(myId).catch(() => null);
+      if (remote) {
+        setState(remote);
+        Timer.saveLocal(myId, remote);
+      } else {
+        setState(null);
+      }
+    };
+    const onVis = () => {
+      if (document.visibilityState === "visible") onFocus();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [myId]);
+
+  // 1-second tick while running
   useEffect(() => {
     if (!state || Timer.isPaused(state)) return;
     const id = window.setInterval(() => setTick((t) => t + 1), 1000);
     return () => window.clearInterval(id);
   }, [state]);
 
-  // Persist on every state change
+  // Persist locally on every change; remote only on lifecycle moments (handled in handlers)
   useEffect(() => {
-    if (myId) Timer.save(myId, state);
-  }, [state, myId]);
+    if (!loaded || !myId) return;
+    Timer.saveLocal(myId, state);
+  }, [state, loaded, myId]);
 
-  // Watch for phase end
+  // Phase-end handler
   useEffect(() => {
     if (!state || Timer.isPaused(state)) return;
-    const remaining = Timer.remainingSec(state);
-    if (remaining > 0) return;
-    // phase ended
-    if (state.phase === "session") {
-      // log session
-      const actual = Math.min(state.durationSec, Timer.elapsedSec(state));
-      logSession(actual, state.subjectKey, state.subjectName, state.startedAt - state.elapsedBeforePauseSec * 1000);
-      notify("Study", "Session done — break starting 🌿").catch(() => undefined);
-      setState({
-        ...state,
-        phase: "break",
-        startedAt: Date.now(),
-        elapsedBeforePauseSec: 0,
-        durationSec: state.breakDurationSec,
-        pausedAt: null,
-      });
-    } else {
-      notify("Study", "Break over — ready for next session ✨").catch(() => undefined);
-      setState(null);
-    }
+    if (Timer.remainingSec(state) > 0) return;
+    (async () => {
+      if (state.phase === "session") {
+        const actual = Math.min(state.durationSec, Timer.elapsedSec(state));
+        await logSession(actual, state.subjectKey, state.subjectName, state.originalStartedAt);
+        notify("Study", "Session done — break starting 🌿").catch(() => undefined);
+        const next: Timer.TimerState = {
+          ...state,
+          phase: "break",
+          startedAt: Date.now(),
+          originalStartedAt: Date.now(),
+          elapsedBeforePauseSec: 0,
+          durationSec: state.breakDurationSec,
+          pausedAt: null,
+        };
+        setState(next);
+        await Timer.persist(myId, next);
+      } else {
+        notify("Study", "Break over — ready for next session ✨").catch(() => undefined);
+        setState(null);
+        await Timer.persist(myId, null);
+      }
+    })();
     /* eslint-disable-next-line */
   }, [state ? Timer.remainingSec(state) : 0]);
 
@@ -527,10 +725,12 @@ function SessionTab({
     await onSessionLogged();
   };
 
-  const start = () => {
-    setState({
+  const start = async () => {
+    const now = Date.now();
+    const next: Timer.TimerState = {
       phase: "session",
-      startedAt: Date.now(),
+      startedAt: now,
+      originalStartedAt: now,
       durationSec: sessionDefault * 60,
       subjectKey: subject.key,
       subjectName: subject.name,
@@ -538,12 +738,16 @@ function SessionTab({
       elapsedBeforePauseSec: 0,
       sessionDurationSec: sessionDefault * 60,
       breakDurationSec: breakDefault * 60,
-    });
+    };
+    setState(next);
+    await Timer.persist(myId, next);
   };
 
-  const togglePause = () => {
+  const togglePause = async () => {
     if (!state) return;
-    setState(Timer.isPaused(state) ? Timer.resume(state) : Timer.pause(state));
+    const next = Timer.isPaused(state) ? Timer.resume(state) : Timer.pause(state);
+    setState(next);
+    await Timer.persist(myId, next);
   };
 
   const confirmStop = async () => {
@@ -553,10 +757,10 @@ function SessionTab({
     }
     if (state.phase === "session") {
       const actual = Timer.elapsedSec(state);
-      const startMs = state.startedAt - state.elapsedBeforePauseSec * 1000;
-      await logSession(actual, state.subjectKey, state.subjectName, startMs);
+      await logSession(actual, state.subjectKey, state.subjectName, state.originalStartedAt);
     }
     setState(null);
+    await Timer.persist(myId, null);
     setStopOpen(false);
   };
 
@@ -570,13 +774,41 @@ function SessionTab({
   }, [syllabus]);
 
   const remainingSec = state ? Timer.remainingSec(state) : 0;
-  const recent = sessions.slice(0, 50);
+  const total = state?.durationSec ?? 1;
+  const pct = state ? ((total - remainingSec) / total) * 100 : 0;
 
   return (
-    <div className="space-y-4">
-      <div className="parchment-card rounded-2xl p-5 space-y-4">
-        <div>
-          <label className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">Subject</label>
+    <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-card to-card p-5 space-y-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+          {state ? (state.phase === "session" ? "Session in progress" : "On break") : "Ready to study"}
+        </p>
+        {state && (
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {Timer.fmtHourMin(Timer.elapsedSec(state))} elapsed
+          </span>
+        )}
+      </div>
+
+      {/* Big timer */}
+      <div className="text-center py-2">
+        <p className="font-display text-6xl text-primary tabular-nums tracking-tight">
+          {Timer.fmtMMSS(remainingSec || (state ? 0 : sessionDefault * 60))}
+        </p>
+        {state?.subjectName && <p className="text-xs text-muted-foreground mt-1">{state.subjectName}</p>}
+        {state && (
+          <div className="mt-3 h-1.5 rounded-full bg-muted/50 overflow-hidden mx-auto max-w-xs">
+            <div
+              className="h-full bg-gradient-to-r from-primary/60 to-primary transition-all duration-700"
+              style={{ width: `${pct}%`, boxShadow: "0 0 8px hsl(var(--primary) / 0.5)" }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Controls */}
+      {!state ? (
+        <div className="space-y-3">
           <Select
             value={subject.key ?? "general"}
             onValueChange={(v) => {
@@ -587,9 +819,7 @@ function SessionTab({
               }
             }}
           >
-            <SelectTrigger className="mt-1">
-              <SelectValue placeholder="General study" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="General study" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="general">General study</SelectItem>
               {subjectOptions.map((o) => (
@@ -597,70 +827,56 @@ function SessionTab({
               ))}
             </SelectContent>
           </Select>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">Session (min)</label>
-            <Input
-              type="number"
-              min={1}
-              max={240}
-              value={sessionDefault}
-              onChange={(e) => {
-                const v = Math.max(1, Number(e.target.value) || 1);
-                setSessionDefault(v);
-                persistDefaults(v, breakDefault);
-              }}
-              disabled={!!state}
-            />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="font-display text-[9px] uppercase tracking-widest text-muted-foreground">Session min</label>
+              <Input
+                type="number"
+                min={1}
+                max={240}
+                value={sessionDefault}
+                onChange={(e) => {
+                  const v = Math.max(1, Number(e.target.value) || 1);
+                  setSessionDefault(v);
+                  persistDefaults(v, breakDefault);
+                }}
+              />
+            </div>
+            <div>
+              <label className="font-display text-[9px] uppercase tracking-widest text-muted-foreground">Break min</label>
+              <Input
+                type="number"
+                min={1}
+                max={120}
+                value={breakDefault}
+                onChange={(e) => {
+                  const v = Math.max(1, Number(e.target.value) || 1);
+                  setBreakDefault(v);
+                  persistDefaults(sessionDefault, v);
+                }}
+              />
+            </div>
           </div>
-          <div>
-            <label className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">Break (min)</label>
-            <Input
-              type="number"
-              min={1}
-              max={120}
-              value={breakDefault}
-              onChange={(e) => {
-                const v = Math.max(1, Number(e.target.value) || 1);
-                setBreakDefault(v);
-                persistDefaults(sessionDefault, v);
-              }}
-              disabled={!!state}
-            />
-          </div>
+          <Button onClick={start} className="w-full"><Play className="size-4" /> Start session</Button>
         </div>
-
-        <div className="text-center py-4">
-          <p className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
-            {state ? (state.phase === "session" ? "Session" : "Break") : "Ready"}
-          </p>
-          <p className="font-display text-6xl text-primary tabular-nums mt-2">{Timer.fmtMMSS(remainingSec)}</p>
-          {state?.subjectName && <p className="text-xs text-muted-foreground mt-1">{state.subjectName}</p>}
-        </div>
-
+      ) : (
         <div className="flex justify-center gap-2">
-          {!state ? (
-            <Button onClick={start}><Play className="size-4" /> Start</Button>
-          ) : (
-            <>
-              <Button variant="outline" onClick={togglePause}>
-                {Timer.isPaused(state) ? <><Play className="size-4" /> Resume</> : <><Pause className="size-4" /> Pause</>}
-              </Button>
-              <Button variant="destructive" onClick={() => setStopOpen(true)}>
-                <Square className="size-4" /> Stop
-              </Button>
-            </>
-          )}
+          <Button variant="outline" onClick={togglePause}>
+            {Timer.isPaused(state) ? <><Play className="size-4" /> Resume</> : <><Pause className="size-4" /> Pause</>}
+          </Button>
+          <Button variant="destructive" onClick={() => setStopOpen(true)}>
+            <Square className="size-4" /> Stop
+          </Button>
         </div>
-      </div>
+      )}
 
       <AlertDialog open={stopOpen} onOpenChange={setStopOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>End session?</AlertDialogTitle>
-            <AlertDialogDescription>Your time will be logged.</AlertDialogDescription>
+            <AlertDialogTitle>End {state?.phase === "break" ? "break" : "session"}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {state?.phase === "session" ? "Your time will be logged." : "Your break will be cleared."}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -668,36 +884,13 @@ function SessionTab({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <div className="parchment-card rounded-2xl p-4 space-y-2">
-        <h3 className="font-display text-sm uppercase tracking-widest text-primary">Recent sessions</h3>
-        {recent.length === 0 ? (
-          <p className="text-xs italic text-muted-foreground text-center py-6">no sessions logged yet</p>
-        ) : (
-          <ul className="space-y-1">
-            {recent.map((s) => {
-              const isMine = s.user_id === myId;
-              const mins = Math.round(s.duration_seconds / 60);
-              return (
-                <li key={s.id} className={["flex items-center justify-between text-xs py-1.5 border-b border-border/30 last:border-0", !isMine && "opacity-70"].filter(Boolean).join(" ")}>
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate">{s.subject_name ?? "General study"}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {new Date(s.started_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })} · {isMine ? "you" : `@${partnerName}`}
-                    </p>
-                  </div>
-                  <span className="tabular-nums text-muted-foreground ml-2">{mins}m</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
     </div>
   );
 }
 
-// ----- Subjects -----
+// ============================================================
+// Subjects (unchanged)
+// ============================================================
 
 function SubjectsTab({
   myId,
@@ -780,7 +973,6 @@ function SubjectsTab({
     toast.success("Syllabus saved");
   };
 
-  // Hours per module this week
   const hoursThisWeek = (uid: string, moduleName: string): number => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const weekStart = new Date(today); weekStart.setDate(weekStart.getDate() - 6);
@@ -806,9 +998,7 @@ function SubjectsTab({
           </div>
           {editorOpen && (
             <div className="space-y-2">
-              <p className="text-[11px] text-muted-foreground">
-                # Module · - Branch · plain line for topic
-              </p>
+              <p className="text-[11px] text-muted-foreground"># Module · - Branch · plain line for topic</p>
               <Textarea rows={10} value={pasteText} onChange={(e) => setPasteText(e.target.value)} placeholder="# Module 1&#10;- Branch A&#10;Topic one&#10;Topic two" />
               {pasteError && <p className="text-xs text-destructive">{pasteError}</p>}
               <Button size="sm" onClick={handleParse}>Save syllabus</Button>
@@ -843,7 +1033,7 @@ function SubjectsTab({
               <div className="flex-1 text-left">
                 <p className="font-display text-sm tracking-wide">{m.name}</p>
                 <p className="text-[10px] text-muted-foreground">
-                  you {myH.toFixed(1)}h · @{partnerName} {partnerH.toFixed(1)}h
+                  you {Timer.fmtHourMin(myH * 3600)} · @{partnerName} {Timer.fmtHourMin(partnerH * 3600)}
                 </p>
               </div>
               <ChevronDown className="size-4 text-muted-foreground" />
@@ -897,9 +1087,11 @@ function RatingChip({ rating, onClick, editable }: { rating: string | undefined;
   );
 }
 
-// ----- Achievements -----
+// ============================================================
+// Achievements
+// ============================================================
 
-function AchievementsTab({ achievements, myId, partnerId, partnerName, youName }: { achievements: Achievement[]; myId: string; partnerId: string | null; partnerName: string; youName: string }) {
+function AchievementsTab({ achievements, myId, partnerName, youName }: { achievements: Achievement[]; myId: string; partnerId: string | null; partnerName: string; youName: string }) {
   const earnedByKey: Record<string, Achievement[]> = {};
   for (const a of achievements) {
     earnedByKey[a.achievement_key] ??= [];
