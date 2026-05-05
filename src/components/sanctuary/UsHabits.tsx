@@ -250,8 +250,15 @@ export function UsHabits() {
 
   return (
     <div className="space-y-4">
-      <div className="text-center">
+      <div className="text-center relative">
         <h2 className="font-display text-2xl tracking-widest text-primary">HABITS</h2>
+        <button
+          onClick={() => setEditMode((v) => !v)}
+          className="absolute top-0 right-0 size-8 rounded-full text-muted-foreground/70 hover:text-primary hover:bg-accent/40 inline-flex items-center justify-center transition-colors"
+          aria-label={editMode ? "Done editing" : "Edit habits"}
+        >
+          {editMode ? <Check className="size-4" /> : <Pencil className="size-4" />}
+        </button>
       </div>
 
       {/* Stats */}
@@ -268,29 +275,52 @@ export function UsHabits() {
         </div>
       </div>
 
-      {/* Add section */}
-      <div className="flex gap-2">
-        <Input placeholder="New section name…" value={newSection} onChange={(e) => setNewSection(e.target.value)} />
-        <Button onClick={addSection}>
-          <Plus className="size-4" /> Section
-        </Button>
-      </div>
+      {/* Add section — only when editing */}
+      {editMode && (
+        <div className="flex gap-2">
+          <Input placeholder="New section name…" value={newSection} onChange={(e) => setNewSection(e.target.value)} />
+          <Button onClick={addSection}>
+            <Plus className="size-4" /> Section
+          </Button>
+        </div>
+      )}
 
       {/* My sections */}
       {mySections.map((sec) => {
         const myHabits = habits.filter((h) => h.section_id === sec.id && h.user_id === myId);
+        const groups: { key: Habit["visibility"]; label: string; icon: any }[] = [
+          { key: "shared", label: "Shared", icon: Users },
+          { key: "visible", label: "Visible", icon: Eye },
+          { key: "private", label: "Private", icon: EyeOff },
+        ];
         return (
           <div key={sec.id} className="parchment-card rounded-2xl p-4 space-y-3">
             <div className="flex items-center gap-2">
               <h3 className="flex-1 font-display text-sm uppercase tracking-widest text-primary">{sec.name}</h3>
-              <button onClick={() => deleteSection(sec.id)} className="text-muted-foreground hover:text-destructive">
-                <Trash2 className="size-4" />
-              </button>
+              {editMode && (
+                <button onClick={() => deleteSection(sec.id)} className="text-muted-foreground hover:text-destructive">
+                  <Trash2 className="size-4" />
+                </button>
+              )}
             </div>
-            {myHabits.map((h) => renderHabit(h, true))}
-            <Button variant="ghost" size="sm" onClick={() => addHabit(sec.id)}>
-              <Plus className="size-3" /> Add habit
-            </Button>
+            {groups.map((g) => {
+              const items = myHabits.filter((h) => h.visibility === g.key);
+              if (items.length === 0) return null;
+              const GIcon = g.icon;
+              return (
+                <div key={g.key} className="space-y-2">
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1">
+                    <GIcon className="size-3" /> {g.label}
+                  </p>
+                  {items.map((h) => renderHabit(h, true))}
+                </div>
+              );
+            })}
+            {editMode && (
+              <Button variant="ghost" size="sm" onClick={() => addHabit(sec.id)}>
+                <Plus className="size-3" /> Add habit
+              </Button>
+            )}
           </div>
         );
       })}
@@ -298,10 +328,25 @@ export function UsHabits() {
       {/* Unsectioned habits */}
       <div className="parchment-card rounded-2xl p-4 space-y-3">
         <h3 className="font-display text-sm uppercase tracking-widest text-primary">Other</h3>
-        {habits.filter((h) => h.user_id === myId && !h.section_id).map((h) => renderHabit(h, true))}
-        <Button variant="ghost" size="sm" onClick={() => addHabit(null)}>
-          <Plus className="size-3" /> Add habit
-        </Button>
+        {(["shared", "visible", "private"] as const).map((vis) => {
+          const items = habits.filter((h) => h.user_id === myId && !h.section_id && h.visibility === vis);
+          if (items.length === 0) return null;
+          const Icon = vis === "shared" ? Users : vis === "visible" ? Eye : EyeOff;
+          const label = vis === "shared" ? "Shared" : vis === "visible" ? "Visible" : "Private";
+          return (
+            <div key={vis} className="space-y-2">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1">
+                <Icon className="size-3" /> {label}
+              </p>
+              {items.map((h) => renderHabit(h, true))}
+            </div>
+          );
+        })}
+        {editMode && (
+          <Button variant="ghost" size="sm" onClick={() => addHabit(null)}>
+            <Plus className="size-3" /> Add habit
+          </Button>
+        )}
       </div>
 
       {/* Partner read-only (visible only) */}
