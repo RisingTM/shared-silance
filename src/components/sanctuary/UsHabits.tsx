@@ -360,10 +360,26 @@ export function UsHabits() {
               (h) => h.section_id === sec.id && h.user_id === partnerId && (h.visibility === "visible" || h.visibility === "shared"),
             );
             if (partnerHabits.length === 0) return null;
+            const groups: { key: "shared" | "visible"; label: string; icon: any }[] = [
+              { key: "shared", label: "Shared", icon: Users },
+              { key: "visible", label: "Visible", icon: Eye },
+            ];
             return (
               <div key={sec.id} className="rounded-2xl border border-border/60 p-4 space-y-3 bg-muted/20">
                 <h4 className="font-display text-xs uppercase tracking-widest text-muted-foreground">{sec.name}</h4>
-                {partnerHabits.map((h) => renderHabit(h, false))}
+                {groups.map((g) => {
+                  const items = partnerHabits.filter((h) => h.visibility === g.key);
+                  if (items.length === 0) return null;
+                  const GIcon = g.icon;
+                  return (
+                    <div key={g.key} className="space-y-2">
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1">
+                        <GIcon className="size-3" /> {g.label}
+                      </p>
+                      {items.map((h) => renderHabit(h, false))}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
