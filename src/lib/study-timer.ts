@@ -7,15 +7,20 @@ export type TimerPhase = "session" | "break";
 
 export type TimerState = {
   phase: TimerPhase;
-  startedAt: number; // epoch ms when current run segment started
+  startedAt: number; // epoch ms when current run segment started (resets on resume)
+  originalStartedAt: number; // epoch ms when this phase first began (stable)
   durationSec: number; // total duration for this phase
   subjectKey: string | null;
   subjectName: string | null;
-  pausedAt: number | null; // when paused
-  elapsedBeforePauseSec: number; // accumulated elapsed before current run segment
+  pausedAt: number | null;
+  elapsedBeforePauseSec: number;
   sessionDurationSec: number;
   breakDurationSec: number;
 };
+
+// Backwards-compat aliases for any old callers
+export const load = loadLocal;
+export const save = saveLocal;
 
 export const KEY = (userId: string) => `silance_study_timer:${userId}`;
 
