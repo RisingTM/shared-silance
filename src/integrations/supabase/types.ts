@@ -471,6 +471,7 @@ export type Database = {
           share_last_seen: boolean
           study_break_duration_default: number
           study_session_duration_default: number
+          study_timer_state: Json | null
           username: string
         }
         Insert: {
@@ -492,6 +493,7 @@ export type Database = {
           share_last_seen?: boolean
           study_break_duration_default?: number
           study_session_duration_default?: number
+          study_timer_state?: Json | null
           username: string
         }
         Update: {
@@ -513,6 +515,7 @@ export type Database = {
           share_last_seen?: boolean
           study_break_duration_default?: number
           study_session_duration_default?: number
+          study_timer_state?: Json | null
           username?: string
         }
         Relationships: [
