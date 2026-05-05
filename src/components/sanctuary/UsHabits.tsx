@@ -17,7 +17,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { WeekCircles, weekStartSaturday } from "@/components/WeekCircles";
-import { Plus, Trash2, History, Eye, EyeOff, Users } from "lucide-react";
+import { Plus, Trash2, History, Eye, EyeOff, Users, Pencil, Check } from "lucide-react";
 import { toast } from "sonner";
 
 type Section = { id: string; name: string; user_id: string; sort_order: number };
@@ -41,6 +41,7 @@ export function UsHabits() {
   const [allLogs, setAllLogs] = useState<Log[]>([]);
   const [historyHabit, setHistoryHabit] = useState<Habit | null>(null);
   const [newSection, setNewSection] = useState("");
+  const [editMode, setEditMode] = useState(false);
 
   const myId = user?.id;
   const partnerId = partnerProfile?.id;
