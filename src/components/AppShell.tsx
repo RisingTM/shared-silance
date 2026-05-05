@@ -413,24 +413,45 @@ export function AppShell({ children }: { children: ReactNode }) {
       </footer>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-card/95 backdrop-blur sm:hidden">
-        <div className="mx-auto grid max-w-3xl grid-cols-5 gap-1 px-2 py-2">
-          {TABS.map((t) => {
-            const active = loc.pathname.startsWith(t.to);
-            const Icon = t.icon;
-            return (
-              <Link
-                key={t.to}
-                to={t.to}
-                className={[
-                  "flex min-h-12 flex-col items-center justify-center rounded-md text-[11px] uppercase tracking-wider",
-                  active ? "bg-primary/15 text-primary" : "text-muted-foreground",
-                ].join(" ")}
-              >
-                <Icon className="size-4" />
-                {t.label}
-              </Link>
-            );
-          })}
+        <div className="mx-auto max-w-3xl px-2 py-2 space-y-1">
+          <div className="grid grid-cols-3 gap-1">
+            {TABS.slice(0, 3).map((t) => {
+              const active = loc.pathname.startsWith(t.to);
+              const Icon = t.icon;
+              return (
+                <Link
+                  key={t.to}
+                  to={t.to}
+                  className={[
+                    "flex min-h-12 flex-col items-center justify-center rounded-md text-[11px] uppercase tracking-wider",
+                    active ? "bg-primary/15 text-primary" : "text-muted-foreground",
+                  ].join(" ")}
+                >
+                  <Icon className="size-4" />
+                  {t.label}
+                </Link>
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-2 gap-1">
+            {TABS.slice(3).map((t) => {
+              const active = loc.pathname.startsWith(t.to);
+              const Icon = t.icon;
+              return (
+                <Link
+                  key={t.to}
+                  to={t.to}
+                  className={[
+                    "flex min-h-12 flex-col items-center justify-center rounded-md text-[11px] uppercase tracking-wider",
+                    active ? "bg-primary/15 text-primary" : "text-muted-foreground",
+                  ].join(" ")}
+                >
+                  <Icon className="size-4" />
+                  {t.label}
+                </Link>
+              );
+            })}
+          </div>
         </div>
       </nav>
 
