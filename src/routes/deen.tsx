@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { WeekCircles, weekRangeLabel, weekStartSaturday } from "@/components/WeekCircles";
 import { toast } from "sonner";
@@ -60,81 +61,95 @@ function DeenPage() {
 function DeenLogButton() {
   const { user, partnerProfile } = useSession();
   const [open, setOpen] = useState(false);
-  const [summary, setSummary] = useState<{ key: string; label: string }[]>([]);
+  const [today, setToday] = useState<{ key: string; emoji: string; label: string; ts: number }[]>([]);
+  const [history, setHistory] = useState<{ date: string; items: { emoji: string; label: string }[] }[]>([]);
   const lsKey = user ? `silance_deen_last_viewed:${user.id}` : "";
 
-  const buildSummary = async (autoOpen: boolean) => {
-    if (!user || !partnerProfile?.id) return;
-    const stored = window.localStorage.getItem(lsKey);
-    const sinceISO = stored ? new Date(Number(stored)).toISOString() : new Date(Date.now() - 7 * 86400000).toISOString();
+  const buildToday = async () => {
+    if (!partnerProfile?.id) return;
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const sinceISO = start.toISOString();
+    const [{ data: dhikr }, { data: quran }, { data: prayers }, { data: athkar }, { data: fasting }] =
+      await Promise.all([
+        supabase.from("deen_dhikr").select("kind, count, updated_at").eq("user_id", partnerProfile.id).gte("updated_at", sinceISO),
+        supabase.from("deen_quran_log").select("pages, created_at").eq("user_id", partnerProfile.id).gte("created_at", sinceISO),
+        supabase.from("deen_prayers").select("prayer, updated_at").eq("user_id", partnerProfile.id).gte("updated_at", sinceISO),
+        supabase.from("deen_athkar").select("kind, updated_at").eq("user_id", partnerProfile.id).gte("updated_at", sinceISO),
+        supabase.from("deen_fasting").select("updated_at").eq("user_id", partnerProfile.id).gte("updated_at", sinceISO),
+      ]);
+    const items: { key: string; emoji: string; label: string; ts: number }[] = [];
+    const dhikrLabel: Record<string, string> = {
+      astaghfirullah: "Astaghfirullah",
+      subhanallah: "SubhanAllah",
+      alhamdulillah: "Alhamdulillah",
+      allahuakbar: "Allahu Akbar",
+    };
+    (dhikr ?? []).forEach((r: any) =>
+      items.push({ key: `dhikr-${r.kind}`, emoji: "📿", label: `${dhikrLabel[r.kind] ?? r.kind} (${r.count})`, ts: new Date(r.updated_at).getTime() }),
+    );
+    const totalPages = (quran ?? []).reduce((s: number, r: any) => s + (r.pages ?? 0), 0);
+    if (totalPages > 0) {
+      const last = (quran ?? []).reduce((m: number, r: any) => Math.max(m, new Date(r.created_at).getTime()), 0);
+      items.push({ key: "quran", emoji: "📖", label: `Quran +${totalPages} page${totalPages === 1 ? "" : "s"}`, ts: last });
+    }
+    (prayers ?? []).forEach((r: any) =>
+      items.push({ key: `pr-${r.prayer}`, emoji: "🕌", label: `${r.prayer} prayer`, ts: new Date(r.updated_at).getTime() }),
+    );
+    (athkar ?? []).forEach((r: any) =>
+      items.push({ key: `ath-${r.kind}`, emoji: "🌿", label: `${r.kind} athkar`, ts: new Date(r.updated_at).getTime() }),
+    );
+    (fasting ?? []).forEach((r: any) =>
+      items.push({ key: `fast-${r.updated_at}`, emoji: "🌙", label: `Fasting`, ts: new Date(r.updated_at).getTime() }),
+    );
+    items.sort((a, b) => a.ts - b.ts);
+    setToday(items);
+  };
 
-    const [
-      { data: dhikr },
-      { data: quran },
-      { data: prayers },
-      { data: athkar },
-      { data: fasting },
-    ] = await Promise.all([
-      supabase.from("deen_quran_log").select("pages, created_at").eq("user_id", partnerProfile.id).gte("created_at", sinceISO),
-      supabase.from("deen_quran_log").select("pages, created_at").eq("user_id", partnerProfile.id).gte("created_at", sinceISO),
-      supabase.from("deen_prayers").select("prayer, days, updated_at").eq("user_id", partnerProfile.id).gte("updated_at", sinceISO),
-      supabase.from("deen_athkar").select("kind, days, updated_at").eq("user_id", partnerProfile.id).gte("updated_at", sinceISO),
-      supabase.from("deen_fasting").select("days, updated_at").eq("user_id", partnerProfile.id).gte("updated_at", sinceISO),
+  const buildHistory = async () => {
+    if (!partnerProfile?.id) return;
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+    const sinceISO = since.toISOString();
+    const [{ data: quran }, { data: prayers }, { data: athkar }, { data: fasting }] = await Promise.all([
+      supabase.from("deen_quran_log").select("pages, created_at, log_date").eq("user_id", partnerProfile.id).gte("created_at", sinceISO),
+      supabase.from("deen_prayers").select("prayer, updated_at").eq("user_id", partnerProfile.id).gte("updated_at", sinceISO),
+      supabase.from("deen_athkar").select("kind, updated_at").eq("user_id", partnerProfile.id).gte("updated_at", sinceISO),
+      supabase.from("deen_fasting").select("updated_at").eq("user_id", partnerProfile.id).gte("updated_at", sinceISO),
     ]);
+    const byDay: Record<string, { emoji: string; label: string }[]> = {};
+    const push = (iso: string, emoji: string, label: string) => {
+      const d = new Date(iso).toLocaleDateString();
+      byDay[d] ??= [];
+      byDay[d].push({ emoji, label });
+    };
+    (quran ?? []).forEach((r: any) => push(r.created_at, "📖", `Quran +${r.pages}`));
+    (prayers ?? []).forEach((r: any) => push(r.updated_at, "🕌", `${r.prayer} prayer`));
+    (athkar ?? []).forEach((r: any) => push(r.updated_at, "🌿", `${r.kind} athkar`));
+    (fasting ?? []).forEach((r: any) => push(r.updated_at, "🌙", "Fasting"));
+    const out = Object.entries(byDay)
+      .map(([date, items]) => ({ date, items }))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    setHistory(out);
+  };
 
-    // Dhikr deltas — compare current count vs at-last-view by reading dhikr table snapshots
-    // Simpler: report current totals if updated since last view
-    const { data: dhikrNow } = await supabase
-      .from("deen_dhikr")
-      .select("kind, count, updated_at")
-      .eq("user_id", partnerProfile.id)
-      .gte("updated_at", sinceISO);
+  useEffect(() => {
+    buildToday().catch(() => undefined);
+    buildHistory().catch(() => undefined);
+    /* eslint-disable-next-line */
+  }, [user?.id, partnerProfile?.id]);
 
-    const items: { key: string; label: string }[] = [];
-
-    if (dhikrNow && dhikrNow.length) {
-      const labelMap: Record<string, string> = {
-        astaghfirullah: "Astaghfirullah",
-        subhanallah: "SubhanAllah",
-        alhamdulillah: "Alhamdulillah",
-        allahuakbar: "Allahu Akbar",
-      };
-      const parts = dhikrNow
-        .map((r: any) => `${labelMap[r.kind] ?? r.kind} (${r.count})`)
-        .join(", ");
-      if (parts) items.push({ key: "dhikr", label: `Dhikr — ${parts}` });
-    }
-
-    const quranPages = (quran ?? []).reduce((s: number, r: any) => s + (r.pages ?? 0), 0);
-    if (quranPages > 0) items.push({ key: "quran", label: `Quran — +${quranPages} page${quranPages === 1 ? "" : "s"}` });
-
-    if (prayers && prayers.length) {
-      const names = prayers.map((p: any) => p.prayer).join(", ");
-      items.push({ key: "prayers", label: `Prayers — updated ${names}` });
-    }
-
-    if (athkar && athkar.length) {
-      const names = athkar.map((a: any) => a.kind).join(", ");
-      items.push({ key: "athkar", label: `Athkar — ${names}` });
-    }
-
-    if (fasting && fasting.length) {
-      items.push({ key: "fasting", label: `Fasting — updated this week` });
-    }
-
-    setSummary(items);
-
+  // Auto-pop if there are entries newer than last view
+  useEffect(() => {
+    if (!lsKey || today.length === 0) return;
+    const stored = window.localStorage.getItem(lsKey);
     if (!stored) {
       window.localStorage.setItem(lsKey, String(Date.now()));
       return;
     }
-    if (autoOpen && items.length > 0) setOpen(true);
-  };
-
-  useEffect(() => {
-    buildSummary(true).catch(() => undefined);
-    /* eslint-disable-next-line */
-  }, [user?.id, partnerProfile?.id]);
+    const latest = Math.max(...today.map((t) => t.ts));
+    if (latest > Number(stored)) setOpen(true);
+  }, [today, lsKey]);
 
   const close = () => {
     setOpen(false);
@@ -153,24 +168,63 @@ function DeenLogButton() {
         <Clock className="size-4" />
       </button>
       <Sheet open={open} onOpenChange={(o) => (o ? setOpen(true) : close())}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader>
-            <SheetTitle className="font-display tracking-widest">DEEN LOG</SheetTitle>
+            <SheetTitle className="font-display tracking-widest">DEEN JOURNAL</SheetTitle>
           </SheetHeader>
-          <p className="text-[11px] text-muted-foreground mt-2 italic">
-            What @{partnerProfile.username} has done since you last visited.
-          </p>
-          <div className="mt-5 space-y-2">
-            {summary.length === 0 ? (
-              <p className="text-sm italic text-muted-foreground text-center py-12">nothing new yet…</p>
-            ) : (
-              summary.map((s) => (
-                <div key={s.key} className="rounded-lg border border-border/60 bg-card/40 px-3 py-2 text-sm">
-                  {s.label}
-                </div>
-              ))
-            )}
-          </div>
+          <p className="text-[11px] text-muted-foreground mt-2 italic">@{partnerProfile.username}'s activity</p>
+          <Tabs defaultValue="today" className="mt-5">
+            <TabsList className="grid grid-cols-2 w-full">
+              <TabsTrigger value="today">Today</TabsTrigger>
+              <TabsTrigger value="history">History</TabsTrigger>
+            </TabsList>
+            <TabsContent value="today" className="mt-4">
+              {today.length === 0 ? (
+                <p className="text-sm italic text-muted-foreground text-center py-12">nothing today yet…</p>
+              ) : (
+                <ol className="relative border-l border-border/60 ml-3 space-y-3">
+                  {today.map((e, i) => (
+                    <li key={i} className="ml-4">
+                      <span className="absolute -left-[7px] mt-2 size-3 rounded-full bg-primary/60 border border-background" />
+                      <div className="rounded-xl border border-border/50 bg-card/60 px-3 py-2 flex items-center gap-3">
+                        <span className="text-xl shrink-0">{e.emoji}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm leading-tight truncate">{e.label}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {new Date(e.ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                          </p>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </TabsContent>
+            <TabsContent value="history" className="mt-4">
+              {history.length === 0 ? (
+                <p className="text-sm italic text-muted-foreground text-center py-12">no recent history</p>
+              ) : (
+                <ul className="space-y-3">
+                  {history.map((d) => (
+                    <li key={d.date} className="space-y-1.5">
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{d.date}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {d.items.map((it, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1 rounded-full border border-border/50 bg-card/60 px-2 py-1 text-[11px]"
+                          >
+                            <span>{it.emoji}</span>
+                            <span className="text-muted-foreground">{it.label}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </TabsContent>
+          </Tabs>
         </SheetContent>
       </Sheet>
     </>
