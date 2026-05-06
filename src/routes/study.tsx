@@ -269,7 +269,7 @@ function DashboardTab({
 
       <SubjectBreakdown sessions={sessions} myId={myId} partnerId={partnerId} partnerName={partnerName} />
 
-      <RecentSessions sessions={sessions} myId={myId} partnerName={partnerName} onDeleted={loadAll} />
+      <RecentSessions sessions={sessions} myId={myId} partnerName={partnerName} onDeleted={onSessionLogged} />
     </div>
   );
 }
