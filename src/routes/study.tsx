@@ -558,9 +558,21 @@ function SubjectBreakdown({
   );
 }
 
-function RecentSessions({ sessions, myId, partnerName }: { sessions: Session[]; myId: string; partnerName: string }) {
+function RecentSessions({ sessions, myId, partnerName, onDeleted }: { sessions: Session[]; myId: string; partnerName: string; onDeleted: () => void | Promise<void> }) {
   const recent = sessions.slice(0, 12);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
   if (recent.length === 0) return null;
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase.from("study_sessions").delete().eq("id", id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Session deleted");
+      await onDeleted();
+    }
+    setConfirmId(null);
+  };
+
   return (
     <div className="parchment-card rounded-2xl p-4 space-y-2">
       <h3 className="font-display text-sm uppercase tracking-widest text-primary inline-flex items-center gap-2">
@@ -580,11 +592,34 @@ function RecentSessions({ sessions, myId, partnerName }: { sessions: Session[]; 
                   {new Date(s.started_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })} · {isMine ? "you" : `@${partnerName}`}
                 </p>
               </div>
-              <span className="tabular-nums text-muted-foreground ml-2">{Timer.fmtHourMin(s.duration_seconds)}</span>
+              <div className="flex items-center gap-2 ml-2">
+                <span className="tabular-nums text-muted-foreground">{Timer.fmtHourMin(s.duration_seconds)}</span>
+                {isMine && (
+                  <button
+                    onClick={() => setConfirmId(s.id)}
+                    className="text-muted-foreground/60 hover:text-destructive p-1 -m-1"
+                    aria-label="Delete session"
+                  >
+                    <Square className="size-3" />
+                  </button>
+                )}
+              </div>
             </li>
           );
         })}
       </ul>
+      <AlertDialog open={confirmId !== null} onOpenChange={(o) => !o && setConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this session?</AlertDialogTitle>
+            <AlertDialogDescription>The logged time will be permanently removed from your stats.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmId && handleDelete(confirmId)}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
