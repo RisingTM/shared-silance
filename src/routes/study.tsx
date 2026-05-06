@@ -710,7 +710,7 @@ function SessionPanel({
   };
 
   const logSession = async (durSec: number, sk: string | null, sn: string | null, startMs: number) => {
-    if (!journeyId || !myId || durSec < 5) return;
+    if (!journeyId || !myId || durSec < 300) return;
     const startedAt = new Date(startMs).toISOString();
     const endedAt = new Date(startMs + durSec * 1000).toISOString();
     await supabase.from("study_sessions").insert({
