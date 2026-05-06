@@ -1204,6 +1204,37 @@ export type Database = {
         | "felt_strong"
         | "quiet"
         | "proud_you"
+        | "dua_for_you"
+        | "peace_plan"
+        | "close_allah"
+        | "his_timing"
+        | "mercy"
+        | "name_in_dua"
+        | "not_giving_up"
+        | "for_us"
+        | "stronger_today"
+        | "patience"
+        | "holding_tighter"
+        | "becoming_who"
+        | "still_choosing"
+        | "absence"
+        | "hurt_still_here"
+        | "soft_still"
+        | "better_bcs_you"
+        | "step_forward"
+        | "worth_it"
+        | "reminder_why"
+        | "learning"
+        | "thinking"
+        | "proud_of_you"
+        | "smiled"
+        | "reminded_me"
+        | "holding_us"
+        | "carrying_you"
+        | "grateful"
+        | "promise"
+        | "patient_us"
+        | "full_of_hope"
       user_role: "owner" | "partner"
     }
     CompositeTypes: {
@@ -1350,6 +1381,37 @@ export const Constants = {
         "felt_strong",
         "quiet",
         "proud_you",
+        "dua_for_you",
+        "peace_plan",
+        "close_allah",
+        "his_timing",
+        "mercy",
+        "name_in_dua",
+        "not_giving_up",
+        "for_us",
+        "stronger_today",
+        "patience",
+        "holding_tighter",
+        "becoming_who",
+        "still_choosing",
+        "absence",
+        "hurt_still_here",
+        "soft_still",
+        "better_bcs_you",
+        "step_forward",
+        "worth_it",
+        "reminder_why",
+        "learning",
+        "thinking",
+        "proud_of_you",
+        "smiled",
+        "reminded_me",
+        "holding_us",
+        "carrying_you",
+        "grateful",
+        "promise",
+        "patient_us",
+        "full_of_hope",
       ],
       user_role: ["owner", "partner"],
     },
