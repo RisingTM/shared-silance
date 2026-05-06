@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Play, Pause, Square, ChevronDown, ChevronLeft, ChevronRight, Lock, Flame, Clock, CalendarDays, BookOpen } from "lucide-react";
+import { Play, Pause, Square, ChevronDown, ChevronLeft, ChevronRight, Lock, Flame, Clock, CalendarDays, BookOpen, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { notify } from "@/lib/notifications";
 import { parseSyllabus, itemKey, type Module } from "@/lib/syllabus";
