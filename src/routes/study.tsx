@@ -600,7 +600,7 @@ function RecentSessions({ sessions, myId, partnerName, onDeleted }: { sessions: 
                     className="text-muted-foreground/60 hover:text-destructive p-1 -m-1"
                     aria-label="Delete session"
                   >
-                    <Square className="size-3" />
+                    <Trash2 className="size-3" />
                   </button>
                 )}
               </div>
